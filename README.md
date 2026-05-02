@@ -1,30 +1,79 @@
 # Dividend Capture Scanner
 
-Private Python automation tool for scanning S&P 500 dividend-capture candidates.
+Private S&P 500 dividend-capture signal scanner.
 
-## Current status
+## What It Does
+Scans ~500 S&P 500 stocks daily and alerts when a stock satisfies all three conditions:
+- Ex-dividend date within the next 21 days
+- RSI(14) below 38 (oversold)
+- Current price above the 200-day MA (uptrend intact)
 
-- Termux smoke test: PASS
-- Scanner starts successfully
-- S&P 500 list loads successfully
-- Dashboard renders successfully
-- Dry-run does not send Telegram
-- Dry-run does not create history.json
-- Trade execution: not included
+Sends a Telegram alert for new signals. Deduplicates by `ticker|ex-date` so you are never spammed for the same event.
 
-## Smoke test
+**This is a scanner only. It does not execute trades.**
 
-Run:
+## Status
+| Item | Status |
+|---|---|
+| Repo created | YES |
+| First commit pushed | YES — `eb5de68` |
+| Branch | main |
+| Termux smoke test | PASS |
+| Telegram delivery test | PENDING (v1.1) |
+| Secrets committed | NO |
 
-    ./run_bot.sh --dry-run --limit 10 --show-all
+## Files
+| File | Purpose |
+|---|---|
+| `dividend_scanner.py` | Main scanner |
+| `requirements.txt` | Core Python dependencies |
+| `run_bot.sh` | Launcher (Termux + Linux venv) |
+| `.env.example` | Credentials template |
+| `.gitignore` | Excludes secrets and runtime files |
 
-## Security
+## Quick Start (Termux)
+```bash
+# 1. Clone
+git clone git@github.com:Ciupanezulflipper/dividend-capture-scanner.git
+cd dividend-capture-scanner
 
-Never commit .env, Telegram secrets, history.json, logs, or .termux_req_sha256.
+# 2. Uncomment TERMUX_MODE=1 in run_bot.sh
+sed -i 's/^# TERMUX_MODE=1/TERMUX_MODE=1/' run_bot.sh
+chmod +x run_bot.sh
 
-## Known v1 limitations
+# 3. Configure secrets
+cp .env.example .env
+nano .env   # fill in TELEGRAM_TOKEN and TELEGRAM_CHAT_ID
 
-- No NYSE holiday guard yet.
-- yfinance data may be stale or incomplete.
-- Signals require manual validation.
-- This is not a trading bot.
+# 4. Smoke test (no Telegram, no history write)
+./run_bot.sh --dry-run --limit 10 --show-all
+
+# 5. Full live scan
+./run_bot.sh
+```
+
+## Dependency Strategy
+- **Core** (`requirements.txt`): pure Python, installs on Termux without native compilation
+- **Optional** (attempted by `run_bot.sh`, non-fatal):
+  - `lxml` — faster HTML parser; `html5lib` is the fallback
+  - `pandas-ta` — preferred RSI; pure-pandas Wilder EWM is the fallback
+
+## Crontab (Linux, UTC server clock)
+```
+CRON_TZ=America/New_York
+0 10 * * 1-5 /path/to/dividend-capture-scanner/run_bot.sh >> /path/to/dividend-capture-scanner/cron.log 2>&1
+```
+
+## Signal Frequency
+RSI < 38 + price above 200D MA + ex-date within 21 days is a sparse combination.
+Zero signals for days or weeks is normal in a healthy market. Do not loosen thresholds.
+
+## Never Commit
+`.env` · `history.json` · `*.log` · `.venv/` · `.termux_req_sha256`
+
+## v1 Limitations
+- Does not skip NYSE market holidays
+- yfinance ex-date data may be incomplete or stale
+- No dividend safety check
+- No earnings-date avoidance
+- Manual validation required before acting on any signal
