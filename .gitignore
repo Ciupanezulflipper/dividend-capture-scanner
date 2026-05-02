@@ -1,0 +1,55 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime state
+history.json
+history*.json
+*.corrupt.*.json
+
+# Logs
+*.log
+stock_scan*.log
+cron*.log
+logs/
+log/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local data/cache exports
+cache/
+data/
+exports/
+reports/
+*.csv
+*.xlsx
+*.parquet
+
+# Local Termux dependency stamp
+.termux_req_sha256
