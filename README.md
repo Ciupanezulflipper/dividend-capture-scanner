@@ -1,79 +1,101 @@
-# Dividend Capture Scanner
+# Dividend Quality Pullback Scanner
 
-Private S&P 500 dividend-capture signal scanner.
+Private S&P 500 scanner for quality dividend stocks during controlled pullbacks.
 
-## What It Does
-Scans ~500 S&P 500 stocks daily and alerts when a stock satisfies all three conditions:
-- Ex-dividend date within the next 21 days
-- RSI(14) below 38 (oversold)
-- Current price above the 200-day MA (uptrend intact)
+> **Hypothesis-testing and stock discovery tool. Does not execute trades.**
 
-Sends a Telegram alert for new signals. Deduplicates by `ticker|ex-date` so you are never spammed for the same event.
+## Thesis
+Find quality dividend-paying S&P 500 companies that are temporarily oversold
+while their long-term trend (200D MA) remains intact. Use the upcoming
+ex-dividend date as a timing context filter, not as the primary edge.
 
-**This is a scanner only. It does not execute trades.**
+Alerts are candidate research prompts. Manual validation required before acting.
+
+## Signal Criteria (all required)
+| Condition | Threshold |
+|---|---|
+| Ex-dividend date | Within next 21 calendar days |
+| RSI(14) | Below 38 |
+| Price vs 200D MA | Price above MA (trend intact) |
 
 ## Status
 | Item | Status |
 |---|---|
-| Repo created | YES |
-| First commit pushed | YES — `eb5de68` |
-| Branch | main |
+| First commit pushed | YES — eb5de68 |
 | Termux smoke test | PASS |
-| Telegram delivery test | PENDING (v1.1) |
+| Telegram setup (@DividendQualityBot) | **DONE** |
+| Weekend guard | **VERIFIED PASS** |
+| Forced-weekend 10-ticker scan | **PASS — 0 signals** |
+| Full 500-ticker scan + audit | **PENDING (v1.1 next)** |
 | Secrets committed | NO |
+
+## Known Data Quality Issue
+yfinance returns stale ex-dates for some S&P 500 tickers.
+Log evidence: ADBE returned 2005-03-24, AMD returned 1995-04-27.
+These correctly skip the 21-day window filter. Full scan will quantify failure rate.
 
 ## Files
 | File | Purpose |
 |---|---|
 | `dividend_scanner.py` | Main scanner |
-| `requirements.txt` | Core Python dependencies |
-| `run_bot.sh` | Launcher (Termux + Linux venv) |
+| `requirements.txt` | Core Python dependencies (no native compilation) |
+| `run_bot.sh` | Launcher — Termux and Linux venv modes |
 | `.env.example` | Credentials template |
 | `.gitignore` | Excludes secrets and runtime files |
 
 ## Quick Start (Termux)
 ```bash
-# 1. Clone
 git clone git@github.com:Ciupanezulflipper/dividend-capture-scanner.git
 cd dividend-capture-scanner
-
-# 2. Uncomment TERMUX_MODE=1 in run_bot.sh
 sed -i 's/^# TERMUX_MODE=1/TERMUX_MODE=1/' run_bot.sh
 chmod +x run_bot.sh
+cp .env.example .env && nano .env
+./run_bot.sh --dry-run --limit 10 --show-all   # smoke test
+./run_bot.sh                                    # full live scan
+```
 
-# 3. Configure secrets
-cp .env.example .env
-nano .env   # fill in TELEGRAM_TOKEN and TELEGRAM_CHAT_ID
-
-# 4. Smoke test (no Telegram, no history write)
+## Scan Commands
+```bash
+# Smoke test — no Telegram, no history
 ./run_bot.sh --dry-run --limit 10 --show-all
 
-# 5. Full live scan
+# Weekend override for data-quality audit
+./run_bot.sh --show-all --force-weekend
+
+# Full live scan (run on a market day)
 ./run_bot.sh
 ```
 
 ## Dependency Strategy
-- **Core** (`requirements.txt`): pure Python, installs on Termux without native compilation
-- **Optional** (attempted by `run_bot.sh`, non-fatal):
+- **Core** (`requirements.txt`): pure Python, no native compilation required
+- **Optional** (non-fatal, attempted by `run_bot.sh`):
   - `lxml` — faster HTML parser; `html5lib` is the fallback
   - `pandas-ta` — preferred RSI; pure-pandas Wilder EWM is the fallback
 
 ## Crontab (Linux, UTC server clock)
 ```
 CRON_TZ=America/New_York
-0 10 * * 1-5 /path/to/dividend-capture-scanner/run_bot.sh >> /path/to/dividend-capture-scanner/cron.log 2>&1
+0 10 * * 1-5 /path/to/dividend-capture-scanner/run_bot.sh >> cron.log 2>&1
 ```
 
 ## Signal Frequency
-RSI < 38 + price above 200D MA + ex-date within 21 days is a sparse combination.
-Zero signals for days or weeks is normal in a healthy market. Do not loosen thresholds.
+RSI < 38 + price above 200D MA + ex-date within 21 days is sparse.
+Zero signals for days or weeks is **normal**. Do not loosen thresholds.
+
+## Performance Tracking (required before drawing conclusions)
+Every signal: record ticker, price, SPY price at signal date.
+Measure returns vs SPY at 1/3/5/10/20 trading days.
+Minimum 20-30 signals before drawing any conclusions.
 
 ## Never Commit
 `.env` · `history.json` · `*.log` · `.venv/` · `.termux_req_sha256`
 
 ## v1 Limitations
+- yfinance ex-date data proven to be stale for some tickers
 - Does not skip NYSE market holidays
-- yfinance ex-date data may be incomplete or stale
-- No dividend safety check
-- No earnings-date avoidance
-- Manual validation required before acting on any signal
+- No dividend safety, payout ratio, or earnings-date checks
+- No position sizing, exit rules, or trade execution
+
+## Repo Name Note
+Repo is named `dividend-capture-scanner`. Product direction is now
+"Dividend Quality Pullback Scanner". Rename deferred — conscious tech debt.
