@@ -35,15 +35,17 @@ Locked decisions. Do not reverse without explicit team agreement.
 
 **D12** First known-good commit: `eb5de68`. Do not rebase or force-push this ref.
 
-**D13** v1.1 work order (updated 2026-05-03):
+**D13** v1.1 work order (updated 2026-05-09):
 1. ~~Telegram `.env` + delivery test~~ DONE
-2. Full 500-ticker scan + reason-count audit
-3. CSV export
-4. Post-signal tracking skeleton
-5. NYSE holiday guard (after audit)
-6. Secondary ex-date source (after audit)
+2. ~~CSV export / report mode~~ DONE — PR #1
+3. ~~Reason-count audit output~~ DONE — PR #1
+4. Full 500-ticker scan + report review — PENDING
+5. Post-signal tracking skeleton
+6. NYSE holiday guard (after audit)
+7. Secondary ex-date source (after audit)
 
-**D14** No UI or formatting changes before data quality is validated.
+**D14** No UI or cosmetic dashboard changes before data quality is validated.
+The only accepted display change in v1.1 was audit visibility needed for measurement.
 
 **D15** RSI threshold stays at 38. Sparse signals are expected. Do not loosen.
 
@@ -63,7 +65,7 @@ Track: win rate, avg return, max drawdown, outperformance, signal quality by sec
 
 **D21** This is a hypothesis-testing and stock discovery tool, not a passive-income machine.
 
-**D22** Deferred until after v1.1 audit: NYSE holiday guard, secondary ex-date source,
+**D22** Deferred until after full audit: NYSE holiday guard, secondary ex-date source,
 dashboard polish, threading, any broker automation.
 
 ## 2026-05-03 — Post-Telegram and First Live Run
@@ -83,3 +85,55 @@ Full scan reason-count audit is the immediate priority to quantify failure rate.
 
 **D27** Repo rename deferred as conscious, documented tech debt.
 Will revisit after v1.1 audit is complete. No urgency.
+
+## 2026-05-07 — First Real Telegram Signals
+
+**D28** Live Telegram alert path is proven. Three real alerts fired on 2026-05-07:
+- ED — signal price 106.87, ex-date 2026-05-13, 5 days away, RSI 37.6
+- EA — signal price 200.79, ex-date 2026-05-27, 19 days away, RSI 35.1
+- JNJ — signal price 224.62, ex-date 2026-05-26, 18 days away, RSI 37.1
+
+**D29** EA exposed a likely low-yield noise problem. Do not hard-filter immediately.
+Measure candidate minimum dividend yield first. Initial audit candidate: 1.0%.
+
+**D30** ED exposed a likely too-close-to-ex-date timing problem. Do not hard-filter immediately.
+Measure candidate minimum days-to-ex-date first. Initial audit candidate: 7 days.
+
+**D31** JNJ is the cleanest early example of the intended thesis fit.
+
+## 2026-05-09 — v1.1 Audit/Report Merge
+
+**D32** PR #1 merged v1.1 audit/report layer into `main`.
+Merged main commit: `f2949d42c286720d20a90710f6e6a1bde8a7c8cd`.
+
+**D33** v1.1 adds CSV audit/report output:
+`reports/scan_report_YYYY-MM-DD.csv`.
+Reports are runtime artifacts and remain ignored by git.
+
+**D34** v1.1 adds structured reason categories:
+- `no_ex_date_available`
+- `stale_or_past_ex_date`
+- `ex_date_outside_window`
+- `yfinance_error`
+- `technical_failed_rsi`
+- `technical_failed_ma200`
+- `signal_generated`
+
+**D35** v1.1 adds audit flags:
+- `valid_forward_ex_date_in_window`
+- `low_yield_candidate`
+- `ex_date_too_close_candidate`
+
+**D36** v1.1 adds audit-only proposed filters:
+- `--audit-min-yield`, default `1.0`
+- `--audit-min-days-to-ex-date`, default `7`
+
+**D37** These are NOT hard strategy filters yet. Current signal generation remains:
+ex-date within 21 days + RSI(14) < 38 + price > MA(200).
+Hard activation requires full 500-ticker audit evidence.
+
+**D38** Telegram alert header changed from `Dividend Capture Signal` to
+`Dividend Quality Pullback Signal`.
+
+**D39** Restore points exist before v1.1 work, after v1.1 branch validation,
+and after merged-main validation. See `CONTINUITY.md` for exact refs.
