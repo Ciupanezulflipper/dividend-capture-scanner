@@ -333,6 +333,11 @@ def sanitize_dividend_yield_pct(value: Optional[float]) -> Optional[float]:
     if value < 0:
         return None
     if value > MAX_REASONABLE_DIVIDEND_YIELD_PCT:
+        logging.getLogger("dividend_scanner").warning(
+            "yield_rejected_implausible | value=%.4f max=%.1f",
+            value,
+            MAX_REASONABLE_DIVIDEND_YIELD_PCT,
+        )
         return None
     return value
 
