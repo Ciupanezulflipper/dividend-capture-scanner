@@ -852,7 +852,7 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.info("History saved (%d entries).", len(history))
 
     report_path = None
-    if not args.no_report:
+    if args.report and not args.no_report:
         report_path = write_scan_report(
             results=results,
             report_dir=Path(args.report_dir),
@@ -938,6 +938,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-report", action="store_true",
         help="Disable CSV audit report creation.",
+    )
+    parser.add_argument(
+        "--report", action="store_true",
+        help="Write a CSV audit report (opt-in). Use --report-dir to set destination.",
     )
     parser.add_argument(
         "--audit-min-yield", type=float,
