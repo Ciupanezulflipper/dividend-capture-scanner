@@ -492,13 +492,24 @@ def build_telegram_message(
         if dividend_yield_pct is not None
         else "Dividend Yield: `N/A`\n"
     )
+    low_yield = dividend_yield_pct is not None and dividend_yield_pct < 1.0
+    ex_close = days_away < 7
+    if low_yield and ex_close:
+        grade = "⚠️ LOW YIELD | ⏰ EX-DATE CLOSE"
+    elif low_yield:
+        grade = "⚠️ LOW YIELD"
+    elif ex_close:
+        grade = "⏰ EX-DATE CLOSE"
+    else:
+        grade = "✅ CLEAN"
     return (
         f"*Dividend Quality Pullback Signal*\n"
         f"Ticker: `{symbol}`\n"
         f"Ex-Div Date: `{ex_date}` ({days_away}d away)\n"
         f"{yield_line}"
         f"Price: `${price:.2f}`  |  MA: `${ma:.2f}`\n"
-        f"RSI(14): `{rsi:.1f}`"
+        f"RSI(14): `{rsi:.1f}`\n"
+        f"Grade: {grade}"
     )
 
 
