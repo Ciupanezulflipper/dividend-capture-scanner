@@ -86,6 +86,8 @@ REPORT_FIELDS = [
     "dividend_yield_pct",
     "signal_passed",
     "reason_category",
+    "skip_stage",
+    "skip_reason",
     "audit_flags",
     "passes_audit_min_yield",
     "passes_audit_min_days_to_ex_date",
@@ -557,6 +559,20 @@ def build_results_table(results: list[dict], show_all: bool) -> Table:
 
 # ── Audit report ──────────────────────────────────────────────────────────────
 
+def classify_skip_stage(reason_category: str) -> str:
+    mapping = {
+        "no_ex_date_available":            "data_quality",
+        "stale_or_past_ex_date":           "data_quality",
+        "ex_date_outside_window":          "data_quality",
+        "yfinance_error":                  "error",
+        "technical_failed_rsi":            "strategy",
+        "technical_failed_ma200":          "strategy",
+        "valid_forward_ex_date_in_window": "signal",
+        "signal_generated":                "signal",
+    }
+    return mapping.get(reason_category, "unknown")
+
+
 def build_report_row(scan_date: date, row: dict) -> dict[str, str]:
     return {
         "scan_date": scan_date.isoformat(),
@@ -576,6 +592,8 @@ def build_report_row(scan_date: date, row: dict) -> dict[str, str]:
         "dividend_yield_pct": normalize_report_value(row.get("dividend_yield_pct")),
         "signal_passed": "true" if row.get("signal") else "false",
         "reason_category": normalize_report_value(row.get("reason_category")),
+        "skip_stage": classify_skip_stage(row.get("reason_category", "")),
+        "skip_reason": row.get("reason_category", ""),
         "audit_flags": normalize_report_value(row.get("audit_flags")),
         "passes_audit_min_yield": normalize_report_value(row.get("passes_audit_min_yield")),
         "passes_audit_min_days_to_ex_date": normalize_report_value(row.get("passes_audit_min_days_to_ex_date")),
