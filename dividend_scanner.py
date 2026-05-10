@@ -73,6 +73,13 @@ REPORT_FIELDS = [
     "symbol",
     "ex_date",
     "days_to_ex_date",
+    "yf_ex_date",
+    "yf_ex_date_source",
+    "yf_ex_date_error",
+    "chosen_ex_date",
+    "chosen_ex_date_source",
+    "ex_date_match_status",
+    "ex_date_audit_flags",
     "price",
     "ma200",
     "rsi14",
@@ -216,13 +223,45 @@ def get_ticker_info(ticker_obj, logger: logging.Logger) -> dict[str, Any]:
         return {}
 
 
-def get_ex_dividend_date(
+def _empty_ex_date_details() -> dict[str, Any]:
+    return {
+        "yf_ex_date": None,
+        "yf_ex_date_source": "none",
+        "yf_ex_date_error": "",
+        "chosen_ex_date": None,
+        "chosen_ex_date_source": "none",
+        "ex_date_match_status": "both_missing",
+        "ex_date_audit_flags": "no_usable_ex_date",
+    }
+
+
+def _found_yfinance_ex_date(parsed: date, source: str) -> dict[str, Any]:
+    return {
+        "yf_ex_date": parsed,
+        "yf_ex_date_source": source,
+        "yf_ex_date_error": "",
+        "chosen_ex_date": parsed,
+        "chosen_ex_date_source": source,
+        "ex_date_match_status": "yf_only",
+        "ex_date_audit_flags": "yfinance_ex_date_available",
+    }
+
+
+def get_ex_dividend_date_details(
     ticker_obj,
     logger: logging.Logger,
     info: Optional[dict[str, Any]] = None,
-) -> Optional[date]:
-    """Try yfinance .calendar first, then .info for exDividendDate."""
+) -> dict[str, Any]:
+    """
+    Return yfinance ex-dividend date metadata.
+
+    Phase 1 is audit-only:
+    - No secondary provider is called.
+    - Signal behaviour remains unchanged.
+    - chosen_ex_date is still the yfinance date when available.
+    """
     symbol = ticker_obj.ticker
+    details = _empty_ex_date_details()
 
     try:
         cal = ticker_obj.calendar
@@ -231,28 +270,52 @@ def get_ex_dividend_date(
                 for key in ("Ex-Dividend Date", "exDividendDate", "ex_dividend_date"):
                     parsed = parse_date_value(cal.get(key))
                     if parsed:
-                        return parsed
+                        return _found_yfinance_ex_date(
+                            parsed,
+                            f"yfinance_calendar_dict:{key}",
+                        )
             elif isinstance(cal, pd.DataFrame):
                 if "Ex-Dividend Date" in cal.index:
                     parsed = parse_date_value(cal.loc["Ex-Dividend Date"].iloc[0])
                     if parsed:
-                        return parsed
+                        return _found_yfinance_ex_date(
+                            parsed,
+                            "yfinance_calendar_dataframe:Ex-Dividend Date",
+                        )
             elif isinstance(cal, pd.Series):
                 for key in ("Ex-Dividend Date", "exDividendDate", "ex_dividend_date"):
                     if key in cal:
                         parsed = parse_date_value(cal[key])
                         if parsed:
-                            return parsed
+                            return _found_yfinance_ex_date(
+                                parsed,
+                                f"yfinance_calendar_series:{key}",
+                            )
     except Exception as exc:
+        details["yf_ex_date_error"] = str(exc)[:200]
+        details["ex_date_audit_flags"] = "yfinance_calendar_error|no_usable_ex_date"
         logger.debug("%s calendar error: %s", symbol, exc)
 
     info = info or get_ticker_info(ticker_obj, logger)
     for field in ("exDividendDate", "ex_dividend_date"):
         parsed = parse_date_value(info.get(field))
         if parsed:
-            return parsed
+            return _found_yfinance_ex_date(
+                parsed,
+                f"yfinance_info:{field}",
+            )
 
-    return None
+    return details
+
+
+def get_ex_dividend_date(
+    ticker_obj,
+    logger: logging.Logger,
+    info: Optional[dict[str, Any]] = None,
+) -> Optional[date]:
+    """Backward-compatible wrapper returning only the chosen ex-dividend date."""
+    details = get_ex_dividend_date_details(ticker_obj, logger, info=info)
+    return details.get("chosen_ex_date")
 
 
 MAX_REASONABLE_DIVIDEND_YIELD_PCT = 15.0
@@ -484,6 +547,13 @@ def build_report_row(scan_date: date, row: dict) -> dict[str, str]:
         "symbol": normalize_report_value(row.get("symbol")),
         "ex_date": normalize_report_value(row.get("ex_date")),
         "days_to_ex_date": normalize_report_value(row.get("days_away")),
+        "yf_ex_date": normalize_report_value(row.get("yf_ex_date")),
+        "yf_ex_date_source": normalize_report_value(row.get("yf_ex_date_source")),
+        "yf_ex_date_error": normalize_report_value(row.get("yf_ex_date_error")),
+        "chosen_ex_date": normalize_report_value(row.get("chosen_ex_date")),
+        "chosen_ex_date_source": normalize_report_value(row.get("chosen_ex_date_source")),
+        "ex_date_match_status": normalize_report_value(row.get("ex_date_match_status")),
+        "ex_date_audit_flags": normalize_report_value(row.get("ex_date_audit_flags")),
         "price": normalize_report_value(row.get("price")),
         "ma200": normalize_report_value(row.get("ma")),
         "rsi14": normalize_report_value(row.get("rsi")),
@@ -624,7 +694,13 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                 ticker_obj = yf.Ticker(symbol)
                 info = get_ticker_info(ticker_obj, logger)
 
-                ex_date = get_ex_dividend_date(ticker_obj, logger, info=info)
+                ex_date_details = get_ex_dividend_date_details(
+                    ticker_obj,
+                    logger,
+                    info=info,
+                )
+                row.update(ex_date_details)
+                ex_date = ex_date_details.get("chosen_ex_date")
                 if ex_date is None:
                     row["reason_category"] = "no_ex_date_available"
                     logger.debug("%s: no ex-dividend date found.", symbol)
