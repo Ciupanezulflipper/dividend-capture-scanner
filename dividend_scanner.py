@@ -255,28 +255,71 @@ def get_ex_dividend_date(
     return None
 
 
+MAX_REASONABLE_DIVIDEND_YIELD_PCT = 15.0
+
+
+def sanitize_dividend_yield_pct(value: Optional[float]) -> Optional[float]:
+    """
+    Keep only plausible annualized dividend-yield percentages.
+
+    This is data hygiene, not a strategy filter. Values above the cap are treated
+    as invalid source data instead of being used for signal decisions.
+    """
+    if value is None:
+        return None
+    if value < 0:
+        return None
+    if value > MAX_REASONABLE_DIVIDEND_YIELD_PCT:
+        return None
+    return value
+
+
 def get_dividend_yield_pct(info: dict[str, Any], price: Optional[float]) -> Optional[float]:
     """
     Return annualized dividend yield as percentage, for example 2.5 for 2.5%.
-    yfinance often returns dividendYield as a decimal fraction, e.g. 0.025.
-    """
-    for field in (
-        "dividendYield",
-        "forwardDividendYield",
-        "trailingAnnualDividendYield",
-        "yield",
-    ):
-        value = safe_float(info.get(field))
-        if value is not None:
-            return value * 100 if value <= 1 else value
 
+    yfinance yield units vary by field:
+    - dividendYield currently appears as an already-percent value for stocks
+      such as AAPL=0.38 meaning 0.38%, not 38%.
+    - trailingAnnualDividendYield appears as a decimal fraction, e.g. 0.0036.
+    - dividendRate / price has explicit units, so it is preferred when available.
+    """
     annual_dividend = (
         safe_float(info.get("dividendRate"))
-        or safe_float(info.get("trailingAnnualDividendRate"))
         or safe_float(info.get("forwardAnnualDividendRate"))
+        or safe_float(info.get("trailingAnnualDividendRate"))
     )
     if annual_dividend is not None and price is not None and price > 0:
-        return (annual_dividend / price) * 100
+        derived_pct = (annual_dividend / price) * 100
+        sanitized = sanitize_dividend_yield_pct(derived_pct)
+        if sanitized is not None:
+            return sanitized
+
+    dividend_yield = safe_float(info.get("dividendYield"))
+    if dividend_yield is not None:
+        sanitized = sanitize_dividend_yield_pct(dividend_yield)
+        if sanitized is not None:
+            return sanitized
+
+    forward_yield = safe_float(info.get("forwardDividendYield"))
+    if forward_yield is not None:
+        sanitized = sanitize_dividend_yield_pct(forward_yield)
+        if sanitized is not None:
+            return sanitized
+
+    trailing_yield = safe_float(info.get("trailingAnnualDividendYield"))
+    if trailing_yield is not None:
+        trailing_pct = trailing_yield * 100 if trailing_yield <= 1 else trailing_yield
+        sanitized = sanitize_dividend_yield_pct(trailing_pct)
+        if sanitized is not None:
+            return sanitized
+
+    generic_yield = safe_float(info.get("yield"))
+    if generic_yield is not None:
+        generic_pct = generic_yield * 100 if generic_yield <= 1 else generic_yield
+        sanitized = sanitize_dividend_yield_pct(generic_pct)
+        if sanitized is not None:
+            return sanitized
 
     return None
 
