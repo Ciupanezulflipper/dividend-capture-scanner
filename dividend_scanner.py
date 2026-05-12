@@ -680,6 +680,16 @@ def classify_audit_flags(
     return "|".join(flags), passes_yield, passes_days
 
 
+# ── Telegram clean-only gate ─────────────────────────────────────────────────
+
+def is_clean_signal(audit_flags: str) -> bool:
+    """Return True only when neither low-yield nor ex-date-close flag is set."""
+    return (
+        "low_yield_candidate" not in audit_flags
+        and "ex_date_too_close_candidate" not in audit_flags
+    )
+
+
 # ── Main scan logic ───────────────────────────────────────────────────────────
 
 def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -830,7 +840,14 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                     signals.append(row)
 
                     if not already_alerted(history, symbol, ex_date):
-                        if not args.dry_run and not args.no_telegram:
+                        clean = is_clean_signal(audit_flags)
+                        tg_suppressed = args.telegram_clean_only and not clean
+                        if tg_suppressed:
+                            logger.info(
+                                "Telegram skipped for %s: telegram_clean_only_non_clean_signal",
+                                symbol,
+                            )
+                        elif not args.dry_run and not args.no_telegram:
                             msg = build_telegram_message(
                                 symbol=symbol,
                                 ex_date=ex_date,
@@ -965,6 +982,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--report", action="store_true",
         help="Write a CSV audit report (opt-in). Use --report-dir to set destination.",
+    )
+    parser.add_argument(
+        "--telegram-clean-only", action="store_true",
+        help="Send Telegram alerts only for CLEAN signals (no low_yield_candidate or ex_date_too_close_candidate audit flags).",
     )
     parser.add_argument(
         "--audit-min-yield", type=float,
