@@ -146,6 +146,63 @@ Every signal: record ticker, price, SPY price at signal date.
 Measure returns vs SPY at 1/3/5/10/20 trading days.
 Minimum 20-30 signals before drawing any conclusions.
 
+## S&P 500 Universe Fallback
+
+The scanner fetches the S&P 500 ticker list live from Wikipedia on each run.
+If that fetch fails (e.g. TLS/certificate errors on cron), it falls back to
+the committed cache file `data/sp500_universe.csv` and logs a clear warning:
+
+```
+WARNING: Using cached S&P 500 universe because live fetch failed.
+Cache file: data/sp500_universe.csv. Cache file modified: YYYY-MM-DD HH:MM:SS
+```
+
+The scanner **never auto-updates** the cache during normal runs, to avoid
+poisoning it with partial or corrupt data.
+
+If the cache becomes stale, refresh it manually:
+
+```bash
+python3 - <<'PY'
+from io import StringIO
+from pathlib import Path
+import pandas as pd
+import requests
+
+url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+resp = requests.get(
+    url,
+    headers={"User-Agent": "DividendScanner/1.0"},
+    timeout=30,
+)
+resp.raise_for_status()
+
+tables = pd.read_html(
+    StringIO(resp.text),
+    attrs={"id": "constituents"},
+    flavor="html5lib",
+)
+df = tables[0]
+col = "Symbol" if "Symbol" in df.columns else df.columns[0]
+
+symbols = (
+    df[col]
+    .astype(str)
+    .str.strip()
+    .str.replace(".", "-", regex=False)
+)
+symbols = sorted(set(s for s in symbols if s))
+
+out = Path("data/sp500_universe.csv")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text("symbol\n" + "\n".join(symbols) + "\n", encoding="utf-8")
+
+print(f"Written {len(symbols)} tickers to {out}")
+PY
+```
+
+Then commit the updated `data/sp500_universe.csv`.
+
 ## Never Commit
 `.env` · `history.json` · `*.log` · `.venv/` · `.termux_req_sha256` · `reports/`
 
