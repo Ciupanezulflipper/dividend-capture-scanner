@@ -65,6 +65,7 @@ HISTORY_FILE = PROJECT_ROOT / os.getenv("HISTORY_FILE", "history.json")
 LOG_FILE = PROJECT_ROOT / os.getenv("LOG_FILE", "stock_scan.log")
 
 SP500_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+SP500_CACHE_FILE = PROJECT_ROOT / "data" / "sp500_universe.csv"
 
 console = Console()
 
@@ -119,28 +120,72 @@ def setup_logging(log_file: Path) -> logging.Logger:
 
 # ── S&P 500 ticker fetch ──────────────────────────────────────────────────────
 
+def fetch_live_sp500_tickers(logger: logging.Logger) -> list[str]:
+    """Fetch S&P 500 tickers from Wikipedia. Raises on failure."""
+    response = requests.get(
+        SP500_WIKI_URL,
+        headers={"User-Agent": "Mozilla/5.0 DividendQualityPullbackScanner/1.1"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    tables = pd.read_html(
+        StringIO(response.text),
+        attrs={"id": "constituents"},
+        flavor="html5lib",
+    )
+    df = tables[0]
+    col = "Symbol" if "Symbol" in df.columns else df.columns[0]
+    tickers = df[col].str.replace(".", "-", regex=False).tolist()
+    logger.info("Fetched %d S&P 500 tickers from Wikipedia.", len(tickers))
+    return tickers
+
+
+def load_cached_sp500_tickers(logger: logging.Logger, cache_file: Path) -> list[str]:
+    """Load S&P 500 tickers from local cache file. Raises on failure."""
+    df = pd.read_csv(cache_file, usecols=["symbol"], dtype=str)
+    tickers = df["symbol"].str.strip().dropna().tolist()
+    tickers = [t for t in tickers if t]
+    if not tickers:
+        raise ValueError(f"Cache file {cache_file} is empty or has no valid symbols.")
+    return tickers
+
+
 def fetch_sp500_tickers(logger: logging.Logger) -> list[str]:
-    """Return list of S&P 500 tickers from Wikipedia."""
+    """Return S&P 500 tickers. Uses live Wikipedia; falls back to local cache."""
     try:
-        response = requests.get(
-            SP500_WIKI_URL,
-            headers={"User-Agent": "Mozilla/5.0 DividendQualityPullbackScanner/1.1"},
-            timeout=30,
-        )
-        response.raise_for_status()
-        tables = pd.read_html(
-            StringIO(response.text),
-            attrs={"id": "constituents"},
-            flavor="html5lib",
-        )
-        df = tables[0]
-        col = "Symbol" if "Symbol" in df.columns else df.columns[0]
-        tickers = df[col].str.replace(".", "-", regex=False).tolist()
-        logger.info("Fetched %d S&P 500 tickers from Wikipedia.", len(tickers))
-        return tickers
+        return fetch_live_sp500_tickers(logger)
     except Exception as exc:
-        logger.error("Failed to fetch S&P 500 tickers: %s", exc)
-        console.print(f"[red]ERROR fetching S&P 500 list: {exc}[/red]")
+        logger.warning(
+            "Live S&P 500 fetch failed (%s). Attempting cached fallback.", exc
+        )
+
+    try:
+        mtime = datetime.fromtimestamp(SP500_CACHE_FILE.stat().st_mtime).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        tickers = load_cached_sp500_tickers(logger, SP500_CACHE_FILE)
+        logger.warning(
+            "WARNING: Using cached S&P 500 universe because live fetch failed. "
+            "Cache file: %s. Cache file modified: %s",
+            SP500_CACHE_FILE,
+            mtime,
+        )
+        console.print(
+            f"[yellow]WARNING: Using cached S&P 500 universe (live fetch failed). "
+            f"Cache: {SP500_CACHE_FILE} — modified {mtime}[/yellow]"
+        )
+        return tickers
+    except Exception as cache_exc:
+        logger.error(
+            "Both live fetch and cached fallback failed. Live error: %s. "
+            "Cache error: %s. Cannot continue.",
+            exc,
+            cache_exc,
+        )
+        console.print(
+            f"[red]ERROR: Live S&P 500 fetch failed and cache fallback also failed. "
+            f"Cannot scan an empty universe.[/red]"
+        )
         sys.exit(1)
 
 

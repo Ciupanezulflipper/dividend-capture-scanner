@@ -44,12 +44,15 @@ Thumbs.db
 
 # Local data/cache exports
 cache/
-data/
 exports/
 reports/
 *.csv
 *.xlsx
 *.parquet
+
+# Committed data assets (allow specific files inside data/)
+data/*
+!data/sp500_universe.csv
 
 # Local Termux dependency stamp
 .termux_req_sha256
