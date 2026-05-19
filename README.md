@@ -177,11 +177,16 @@ resp = requests.get(
 )
 resp.raise_for_status()
 
-tables = pd.read_html(StringIO(resp.text))
-df = next(t for t in tables if "Symbol" in t.columns)
+tables = pd.read_html(
+    StringIO(resp.text),
+    attrs={"id": "constituents"},
+    flavor="html5lib",
+)
+df = tables[0]
+col = "Symbol" if "Symbol" in df.columns else df.columns[0]
 
 symbols = (
-    df["Symbol"]
+    df[col]
     .astype(str)
     .str.strip()
     .str.replace(".", "-", regex=False)

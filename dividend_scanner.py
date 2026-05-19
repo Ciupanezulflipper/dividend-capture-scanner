@@ -66,6 +66,7 @@ LOG_FILE = PROJECT_ROOT / os.getenv("LOG_FILE", "stock_scan.log")
 
 SP500_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 SP500_CACHE_FILE = PROJECT_ROOT / "data" / "sp500_universe.csv"
+MIN_SP500_UNIVERSE_COUNT = 450
 
 console = Console()
 
@@ -143,18 +144,33 @@ def fetch_live_sp500_tickers(logger: logging.Logger) -> list[str]:
 def load_cached_sp500_tickers(logger: logging.Logger, cache_file: Path) -> list[str]:
     """Load S&P 500 tickers from local cache file. Raises on failure."""
     df = pd.read_csv(cache_file, usecols=["symbol"], dtype=str)
-    tickers = df["symbol"].str.strip().dropna().tolist()
-    tickers = [t for t in tickers if t]
-    if not tickers:
-        raise ValueError(f"Cache file {cache_file} is empty or has no valid symbols.")
+    normalized = (
+        df["symbol"]
+        .str.strip()
+        .str.replace(".", "-", regex=False)
+        .dropna()
+    )
+    seen: set[str] = set()
+    tickers: list[str] = []
+    for t in normalized:
+        if t and t not in seen:
+            seen.add(t)
+            tickers.append(t)
+    if len(tickers) < MIN_SP500_UNIVERSE_COUNT:
+        raise ValueError(
+            f"Cached S&P 500 universe has only {len(tickers)} symbols; "
+            f"expected at least {MIN_SP500_UNIVERSE_COUNT}."
+        )
     return tickers
 
 
 def fetch_sp500_tickers(logger: logging.Logger) -> list[str]:
     """Return S&P 500 tickers. Uses live Wikipedia; falls back to local cache."""
+    live_exc: Optional[Exception] = None
     try:
         return fetch_live_sp500_tickers(logger)
     except Exception as exc:
+        live_exc = exc
         logger.warning(
             "Live S&P 500 fetch failed (%s). Attempting cached fallback.", exc
         )
@@ -166,20 +182,22 @@ def fetch_sp500_tickers(logger: logging.Logger) -> list[str]:
         tickers = load_cached_sp500_tickers(logger, SP500_CACHE_FILE)
         logger.warning(
             "WARNING: Using cached S&P 500 universe because live fetch failed. "
-            "Cache file: %s. Cache file modified: %s",
+            "Cache file: %s. Cache file modified: %s. Cached tickers: %d",
             SP500_CACHE_FILE,
             mtime,
+            len(tickers),
         )
         console.print(
             f"[yellow]WARNING: Using cached S&P 500 universe (live fetch failed). "
-            f"Cache: {SP500_CACHE_FILE} — modified {mtime}[/yellow]"
+            f"Cache: {SP500_CACHE_FILE} — modified {mtime}. "
+            f"Cached tickers: {len(tickers)}[/yellow]"
         )
         return tickers
     except Exception as cache_exc:
         logger.error(
             "Both live fetch and cached fallback failed. Live error: %s. "
             "Cache error: %s. Cannot continue.",
-            exc,
+            live_exc,
             cache_exc,
         )
         console.print(
