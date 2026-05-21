@@ -753,6 +753,59 @@ def is_clean_signal(audit_flags: str) -> bool:
     )
 
 
+# ── Run quality assessment ────────────────────────────────────────────────────
+
+def assess_run_quality(results: list) -> dict:
+    total = len(results)
+    if total == 0:
+        return {
+            "is_collapsed": True,
+            "reason": "no_rows",
+            "total": 0,
+            "usable_ex_date": 0,
+            "price_count": 0,
+            "provider_errors": 0,
+            "provider_failure_rate": 1.0,
+        }
+    usable_ex_date = sum(1 for r in results if r.get("chosen_ex_date"))
+    price_count = sum(1 for r in results if r.get("price"))
+    provider_errors = sum(
+        1 for r in results
+        if "SSL" in str(r.get("yf_ex_date_error", ""))
+        or "curl" in str(r.get("yf_ex_date_error", ""))
+        or "Failed to perform" in str(r.get("yf_ex_date_error", ""))
+    )
+    rate = provider_errors / total
+    collapsed = usable_ex_date == 0 or price_count == 0 or rate >= 0.80
+    return {
+        "is_collapsed": collapsed,
+        "reason": "provider_collapse" if collapsed else "ok",
+        "total": total,
+        "usable_ex_date": usable_ex_date,
+        "price_count": price_count,
+        "provider_errors": provider_errors,
+        "provider_failure_rate": round(rate, 4),
+    }
+
+
+def write_scan_health(
+    quality: dict,
+    report_dir: Path,
+    scan_date: date,
+    logger: logging.Logger,
+) -> Optional[Path]:
+    """Write scan_health JSON to report_dir. Returns path or None on failure."""
+    try:
+        report_dir.mkdir(parents=True, exist_ok=True)
+        path = report_dir / f"scan_health_{scan_date.isoformat()}.json"
+        path.write_text(json.dumps(quality, indent=2, default=str), encoding="utf-8")
+        logger.info("Scan health written: %s", path)
+        return path
+    except Exception as exc:
+        logger.warning("Could not write scan health file: %s", exc)
+        return None
+
+
 # ── Main scan logic ───────────────────────────────────────────────────────────
 
 def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -902,46 +955,6 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                 if row["signal"]:
                     signals.append(row)
 
-                    if not already_alerted(history, symbol, ex_date):
-                        clean = is_clean_signal(audit_flags)
-                        tg_suppressed = args.telegram_clean_only and not clean
-                        if tg_suppressed:
-                            logger.info(
-                                "Telegram skipped for %s: telegram_clean_only_non_clean_signal",
-                                symbol,
-                            )
-                        elif not args.dry_run and not args.no_telegram:
-                            msg = build_telegram_message(
-                                symbol=symbol,
-                                ex_date=ex_date,
-                                rsi=rsi,
-                                price=price,
-                                ma=ma,
-                                days_away=days_away,
-                                dividend_yield_pct=dividend_yield_pct,
-                            )
-                            sent = send_telegram(
-                                TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg, logger
-                            )
-                            logger.info(
-                                "Telegram alert for %s: %s",
-                                symbol,
-                                "sent" if sent else "FAILED",
-                            )
-                        elif args.dry_run:
-                            logger.info("[DRY-RUN] Would send Telegram for %s.", symbol)
-
-                        if not args.dry_run:
-                            record_alert(history, symbol, ex_date, {
-                                "price": price,
-                                "rsi": rsi,
-                                "ma": ma,
-                                "days_away": days_away,
-                                "dividend_yield_pct": dividend_yield_pct,
-                            })
-                    else:
-                        logger.debug("%s already alerted for ex-date %s.", symbol, ex_date)
-
             except Exception as exc:
                 row["reason_category"] = "yfinance_error"
                 row["error"] = str(exc)
@@ -950,19 +963,101 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
 
             time.sleep(args.sleep_seconds)
 
-    if not args.dry_run:
-        save_history(HISTORY_FILE, history)
-        logger.info("History saved (%d entries).", len(history))
-
+    # ── CSV report (written before quality check so collapse still produces CSV) ──
+    report_dir_path = Path(args.report_dir)
     report_path = None
     if args.report and not args.no_report:
         report_path = write_scan_report(
             results=results,
-            report_dir=Path(args.report_dir),
+            report_dir=report_dir_path,
             scan_date=today,
             logger=logger,
         )
 
+    # ── Run quality assessment ────────────────────────────────────────────────
+    run_quality = assess_run_quality(results)
+    write_scan_health(run_quality, report_dir_path, today, logger)
+
+    if run_quality["is_collapsed"]:
+        logger.error(
+            "DATA_PROVIDER_FAILURE | is_collapsed=True reason=%s total=%d "
+            "usable_ex_date=%d price_count=%d provider_errors=%d rate=%.4f",
+            run_quality["reason"],
+            run_quality["total"],
+            run_quality["usable_ex_date"],
+            run_quality["price_count"],
+            run_quality["provider_errors"],
+            run_quality["provider_failure_rate"],
+        )
+        console.print(
+            f"[bold red]DATA_PROVIDER_FAILURE[/bold red] — "
+            f"provider_error_rate={run_quality['provider_failure_rate'] * 100:.1f}%  "
+            f"usable_ex_dates={run_quality['usable_ex_date']}/{run_quality['total']}  "
+            f"price_count={run_quality['price_count']}  "
+            f"History write: BLOCKED  Signals sent: 0"
+        )
+        if not args.dry_run and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            admin_msg = (
+                f"\u26a0\ufe0f SCANNER: DATA_PROVIDER_FAILURE\n"
+                f"Date: {today}\n"
+                f"Provider error rate: {run_quality['provider_failure_rate'] * 100:.1f}%\n"
+                f"Usable ex-dates: {run_quality['usable_ex_date']}/{run_quality['total']}\n"
+                f"History write: BLOCKED\n"
+                f"Signals sent: 0"
+            )
+            send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, admin_msg, logger)
+            logger.info("Admin Telegram warning sent.")
+        if report_path is not None:
+            console.print(f"[cyan]Audit report:[/cyan] {report_path}")
+        sys.exit(0)
+
+    # ── Not collapsed: send signal Telegrams, write history ──────────────────
+    for sig in signals:
+        sym = sig["symbol"]
+        ex = sig["ex_date"]
+        if not already_alerted(history, sym, ex):
+            flags = sig.get("audit_flags", "")
+            clean = is_clean_signal(flags)
+            tg_suppressed = args.telegram_clean_only and not clean
+            if tg_suppressed:
+                logger.info(
+                    "Telegram skipped for %s: telegram_clean_only_non_clean_signal",
+                    sym,
+                )
+            elif not args.dry_run and not args.no_telegram:
+                msg = build_telegram_message(
+                    symbol=sym,
+                    ex_date=ex,
+                    rsi=sig["rsi"],
+                    price=sig["price"],
+                    ma=sig["ma"],
+                    days_away=sig["days_away"],
+                    dividend_yield_pct=sig.get("dividend_yield_pct"),
+                )
+                sent = send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg, logger)
+                logger.info(
+                    "Telegram alert for %s: %s",
+                    sym,
+                    "sent" if sent else "FAILED",
+                )
+            elif args.dry_run:
+                logger.info("[DRY-RUN] Would send Telegram for %s.", sym)
+            if not args.dry_run:
+                record_alert(history, sym, ex, {
+                    "price": sig["price"],
+                    "rsi": sig["rsi"],
+                    "ma": sig["ma"],
+                    "days_away": sig["days_away"],
+                    "dividend_yield_pct": sig.get("dividend_yield_pct"),
+                })
+        else:
+            logger.debug("%s already alerted for ex-date %s.", sym, ex)
+
+    if not args.dry_run:
+        save_history(HISTORY_FILE, history)
+        logger.info("History saved (%d entries).", len(history))
+
+    # ── Display ───────────────────────────────────────────────────────────────
     display = results if args.show_all else signals
     if display:
         table = build_results_table(display, show_all=True)
