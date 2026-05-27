@@ -27,6 +27,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, timezone
@@ -544,7 +545,8 @@ def send_telegram(token: str, chat_id: str, text: str, logger: logging.Logger) -
         logger.warning("Telegram API error %s: %s", resp.status_code, resp.text[:200])
         return False
     except Exception as exc:
-        logger.warning("Telegram send failed: %s", exc)
+        sanitized = re.sub(r"/bot[^/\s]+/", "/bot[REDACTED]/", str(exc))
+        logger.warning("Telegram send failed: %s", sanitized)
         return False
 
 
@@ -1012,6 +1014,8 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
         sys.exit(0)
 
     # ── Not collapsed: send signal Telegrams, write history ──────────────────
+    delivered: list[str] = []
+
     for sig in signals:
         sym = sig["symbol"]
         ex = sig["ex_date"]
@@ -1024,7 +1028,9 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                     "Telegram skipped for %s: telegram_clean_only_non_clean_signal",
                     sym,
                 )
-            elif not args.dry_run and not args.no_telegram:
+            elif args.dry_run:
+                logger.info("[DRY-RUN] Would send Telegram for %s.", sym)
+            elif not args.no_telegram:
                 msg = build_telegram_message(
                     symbol=sym,
                     ex_date=ex,
@@ -1040,22 +1046,28 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                     sym,
                     "sent" if sent else "FAILED",
                 )
-            elif args.dry_run:
-                logger.info("[DRY-RUN] Would send Telegram for %s.", sym)
-            if not args.dry_run:
-                record_alert(history, sym, ex, {
-                    "price": sig["price"],
-                    "rsi": sig["rsi"],
-                    "ma": sig["ma"],
-                    "days_away": sig["days_away"],
-                    "dividend_yield_pct": sig.get("dividend_yield_pct"),
-                })
+                if sent:
+                    record_alert(history, sym, ex, {
+                        "price": sig["price"],
+                        "rsi": sig["rsi"],
+                        "ma": sig["ma"],
+                        "days_away": sig["days_away"],
+                        "dividend_yield_pct": sig.get("dividend_yield_pct"),
+                    })
+                    delivered.append(sym)
         else:
             logger.debug("%s already alerted for ex-date %s.", sym, ex)
 
     if not args.dry_run:
-        save_history(HISTORY_FILE, history)
-        logger.info("History saved (%d entries).", len(history))
+        if delivered:
+            save_history(HISTORY_FILE, history)
+            logger.info(
+                "History saved (%d entries). Delivered: %s",
+                len(history),
+                ", ".join(delivered),
+            )
+        else:
+            logger.info("No alerts delivered — history not modified.")
 
     # ── Display ───────────────────────────────────────────────────────────────
     display = results if args.show_all else signals
