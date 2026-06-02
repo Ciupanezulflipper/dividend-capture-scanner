@@ -432,21 +432,30 @@ def build_result(sig, price_data, div_data, good_thr, bad_thr):
     post_ex_pr = _r(post_ex_close)
 
     # SPY matching returns
-    def _spy_r(ref_date_obj, n_days=None):
-        if spy_series is None or ref_date_obj is None:
-            return None
-        spy_alert, _ = _first_on_or_after(spy_series, scan_d) if scan_d else (None, None)
-        if n_days:
-            spy_close, _ = _trading_day_offset(spy_series, scan_d, n_days)
-        else:
-            spy_close, _ = _last_before(spy_series, ref_date_obj) if ref_date_obj else (None, None)
-        return _pct_return(spy_alert, spy_close)
+    # spy_alert: SPY close on or after scan_date (baseline, same as stock alert day)
+    spy_alert_price, _ = (_first_on_or_after(spy_series, scan_d)
+                          if spy_series is not None and scan_d else (None, None))
 
-    spy_1d  = _spy_r(p1d_date,  n_days=1)
-    spy_3d  = _spy_r(p3d_date,  n_days=3)
-    spy_5d  = _spy_r(p5d_date,  n_days=5)
-    spy_10d = _spy_r(p10d_date, n_days=10)
-    spy_pre_ex = _spy_r(pre_ex_date)
+    def _spy_nd(n_days):
+        if spy_series is None or scan_d is None:
+            return None
+        spy_close, _ = _trading_day_offset(spy_series, scan_d, n_days)
+        return _pct_return(spy_alert_price, spy_close)
+
+    spy_1d  = _spy_nd(1)
+    spy_3d  = _spy_nd(3)
+    spy_5d  = _spy_nd(5)
+    spy_10d = _spy_nd(10)
+
+    # Pre-ex: SPY last trading day before ex_date (same cutoff as the stock)
+    spy_pre_ex_close, _ = (_last_before(spy_series, ex_d)
+                           if spy_series is not None and ex_d else (None, None))
+    spy_pre_ex = _pct_return(spy_alert_price, spy_pre_ex_close)
+
+    # Post-ex: SPY first trading day on or after ex_date (same cutoff as the stock)
+    spy_post_ex_close, _ = (_first_on_or_after(spy_series, ex_d)
+                            if spy_series is not None and ex_d else (None, None))
+    spy_post_ex = _pct_return(spy_alert_price, spy_post_ex_close)
 
     # dividend amount resolution
     div_amount = None
@@ -546,6 +555,7 @@ def build_result(sig, price_data, div_data, good_thr, bad_thr):
         "spy_return_pct_5d":          spy_5d,
         "spy_return_pct_10d":         spy_10d,
         "spy_pre_ex_return_pct":      spy_pre_ex,
+        "spy_post_ex_return_pct":     spy_post_ex,
         # dividend
         "dividend_amount_used":       div_amount,
         "dividend_amount_source":     div_source,
