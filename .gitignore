@@ -55,5 +55,8 @@ reports/
 data/*
 !data/sp500_universe.csv
 
+# Performance audit outputs (generated at runtime)
+reports/performance_audit_*
+
 # Local Termux dependency stamp
 .termux_req_sha256

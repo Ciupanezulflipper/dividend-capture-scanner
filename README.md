@@ -203,6 +203,82 @@ PY
 
 Then commit the updated `data/sp500_universe.csv`.
 
+## Post-Signal Performance Audit
+
+`tools/audit_signal_performance.py` is a standalone, read-only audit tool.
+It does **not** modify the scanner, cron, history, or any live reports.
+
+### What it does
+
+Reads every `reports/**/scan_report_*.csv`, extracts rows where
+`signal_passed == "true"` or `reason_category == "signal_generated"`,
+deduplicates by `(symbol, ex_date)` keeping the earliest `scan_date`,
+fetches historical price data and dividend records via yfinance, and
+produces a timestamped output folder:
+
+```
+reports/performance_audit_YYYYMMDD_HHMMSS/
+  signal_performance.csv   — per-signal price returns and classification
+  summary_by_grade.csv     — CLEAN / LOW_YIELD / EX_DATE_CLOSE / MIXED_FLAGGED
+  summary_by_symbol.csv    — aggregated per ticker
+  audit_metadata.json      — run provenance and stats
+```
+
+### Basic usage
+
+```bash
+# Audit from scanner reports only
+python3 tools/audit_signal_performance.py
+
+# Include manual screenshot data
+python3 tools/audit_signal_performance.py --signals-file data/manual_signal_audit_seed.csv
+
+# Custom GOOD/BAD thresholds
+python3 tools/audit_signal_performance.py --good-threshold 3.0 --bad-threshold -1.5
+```
+
+### Manual seed CSV format
+
+If you have screenshot data from before the scanner existed, supply it as:
+
+```
+scan_date,symbol,alert_price,ex_date,dividend_yield_pct,rsi14,ma200,grade,source_note,dividend_amount
+```
+
+`dividend_amount` is optional. When present, it is used for actual total-return
+calculations if yfinance cannot confirm the dividend for that ex-date.
+
+### Why raw (unadjusted) Close is used
+
+`auto_adjust=False` is set explicitly. Adjusted prices retroactively reduce
+historical closes to account for dividends paid, which would distort the
+pre/post ex-date price comparison. For dividend-capture analysis the goal is
+to measure the actual market price an investor would have seen at each
+checkpoint, before any adjustment.
+
+### Why adjusted Close alone is not enough
+
+Adjusted Close makes past prices look lower after each dividend event. If you
+use adjusted prices to measure the drop on ex-date you will understate the
+real price move that a holder experienced. Raw Close preserves that signal.
+
+### Why actual dividend amount is required for total-return
+
+`dividend_yield_pct` in the scan reports is an **annualised yield estimate**
+derived from yfinance metadata. It is **not** the per-share cash amount for
+the next dividend. Using `yield / 4` as a proxy would introduce systematic
+error. The audit fetches the actual per-share dividend from yfinance dividend
+history, or accepts it from the manual seed CSV. If neither is available the
+`actual_total_return_pct` columns are left blank rather than fabricated.
+A clearly-labelled `rough_estimated_dividend_amount_ESTIMATE_ONLY` field is
+included for reference but is never used in any return calculation.
+
+### Output files are git-ignored
+
+`reports/performance_audit_*` is in `.gitignore`. Audit output stays local.
+
+---
+
 ## Never Commit
 `.env` · `history.json` · `*.log` · `.venv/` · `.termux_req_sha256` · `reports/`
 
