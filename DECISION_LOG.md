@@ -137,3 +137,26 @@ Hard activation requires full 500-ticker audit evidence.
 
 **D39** Restore points exist before v1.1 work, after v1.1 branch validation,
 and after merged-main validation. See `CONTINUITY.md` for exact refs.
+
+## 2026-06-15 — Daily Heartbeat + 13-Day Silence Diagnosis
+
+**D40** 13-day Telegram silence (2026-06-02 → 2026-06-15) was correct behaviour,
+not a bug. Scanner ran and found 0 clean signals. Root cause confirmed by reading
+`cron_dividend_bot.log` directly — no theorizing.
+
+**D41** `--daily-heartbeat` flag added (opt-in, default OFF). Sends one Telegram
+per healthy run via existing `send_telegram()`. Fires regardless of signal count.
+Purpose: proof-of-life on 0-signal days. Heartbeat is intentionally SKIPPED on
+the collapse path — collapse sends its own `DATA_PROVIDER_FAILURE` admin alert.
+
+**D42** Heartbeat limitation accepted: proves healthy-run completion, not script
+start. A crash mid-scan produces no heartbeat and no alert. External watchdog
+deferred — over-engineering for a research scanner at current scale.
+
+**D43** RSI threshold stays at 38. Signal drought since 2026-06-02 does NOT
+trigger a threshold change. Only ~17 resolved signals exist; the agreed threshold
+before any strategy change is 50–100. Do not loosen out of impatience.
+
+**D44** Known cosmetic bug: `send_telegram()` strips underscores from heartbeat
+text (Markdown parse_mode issue). Visible in reason names e.g. `staleorpastexdate`.
+Accepted as non-blocking; fix deferred.

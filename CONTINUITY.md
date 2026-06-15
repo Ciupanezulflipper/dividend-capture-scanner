@@ -23,12 +23,12 @@ Dividend Quality Pullback Scanner
 
 Run `git log --oneline -5` to confirm actual pushed state before starting any session.
 
-## Current Verified State — 2026-05-09
+## Current Verified State — 2026-06-15
 | Item | Status |
 |---|---|
 | GitHub repo created | YES |
 | First commit pushed | YES — eb5de68 |
-| Current main commit | f2949d4 |
+| Current main commit | see `git log --oneline -1` |
 | Branch | main |
 | Python syntax check | PASS |
 | Bash syntax check | PASS |
@@ -49,7 +49,31 @@ Run `git log --oneline -5` to confirm actual pushed state before starting any se
 | Audit-only min days-to-ex-date flag | IMPLEMENTED — default 7 days |
 | Hard min-yield filter | NOT ACTIVATED |
 | Hard min-days-to-ex-date filter | NOT ACTIVATED |
-| Full 500-ticker scan + audit | PENDING |
+| Full 500-ticker scan + audit | RUNNING — 503 tickers, daily at 10 AM ET |
+| --daily-heartbeat flag | IMPLEMENTED — opt-in, wired into cron |
+| Live 0-signal heartbeat delivery | PROVEN — 2026-06-15 |
+
+## 13-Day Telegram Silence Diagnosis — 2026-06-15
+Silence period: 2026-06-02 → 2026-06-15. No signals fired.
+
+Root cause: **not a bug**. Scanner ran correctly on June 11 and June 12 (confirmed
+via `cron_dividend_bot.log`). Scanned all 503 tickers. Found 0 clean signals
+— no ticker cleared RSI(14) < 38 + price > MA(200) + ex-date in 21-day window
+simultaneously. Market gave nothing; silence was correct discipline.
+
+Problem: correct silence is indistinguishable from a dead bot.
+Fix: `--daily-heartbeat` flag (see below).
+
+## Daily Heartbeat Feature — 2026-06-15
+- New flag `--daily-heartbeat` (store_true, default OFF) added to `dividend_scanner.py`
+- When set + not dry-run + token/chat_id present: sends ONE Telegram after the scan via existing `send_telegram()`
+- Format: `DQP heartbeat YYYY-MM-DD | scanned N | X clean signal(s) | top skip: <reason> <count>`
+- Fires regardless of signal count — proves alive on 0-signal days
+- Intentionally SKIPPED on collapse path: collapse already sends a `DATA_PROVIDER_FAILURE` admin alert
+- Known limitation: proves healthy-run completion only. A crash before scan completes produces no heartbeat and no alert. Acceptable — external watchdog would be over-engineering for a research scanner.
+- Known cosmetic bug PENDING: Telegram strips underscores in heartbeat text (rendered `staleorpastexdate` instead of `stale_or_past_ex_date`). Markdown `parse_mode` issue in `send_telegram()`. Not yet fixed.
+- Wired into the 10 AM ET cron job. Fixed a fused-flag spacing bug during wiring.
+- Proved live on a 0-signal run: heartbeat landed on phone 2026-06-15.
 
 ## Thesis
 **Dividend Quality Pullback Scanner**
@@ -133,19 +157,20 @@ Important: these are not hard filters yet. The scanner still generates signals u
 | 2026-05-09 | `./run_bot.sh --dry-run --limit 10 --show-all --force-weekend` on v1.1 branch | PASS — CSV report created |
 | 2026-05-09 | `./run_bot.sh --dry-run --limit 10 --show-all --force-weekend` on merged main | PASS — CSV report created |
 
+## Signal Drought Watch — 2026-06-15
+Near-zero clean signals since 2026-06-02. Only ~17 resolved signals total vs the
+50–100 threshold agreed before any RSI/MA200 strategy change. Too early to judge
+whether filters are too tight for an uptrending regime. **No strategy changes yet.**
+Watch for: prolonged drought (correct discipline) vs filters miscalibrated for
+a low-volatility, uptrending market. Revisit when resolved signal count reaches 50.
+
 ## Current Next Step
-1. Run full 500-ticker dry-run audit on a market day.
-2. Review CSV report and reason-count summary.
-3. Quantify:
-   - stale/past ex-date count
-   - no ex-date count
-   - valid forward ex-date count
-   - signal count
-   - low-yield candidate count
-   - ex-date-too-close candidate count
-4. Decide whether to activate hard filters:
+1. Accumulate resolved signals to 50–100 (audit tool now wired; heartbeat confirms daily health).
+2. Review CSV reports and audit signal performance tool output.
+3. Decide whether to activate hard filters once data supports it:
    - Candidate minimum dividend yield: 1.0%
    - Candidate minimum days-to-ex-date: 7 days
+4. Fix underscores-stripped cosmetic bug in `send_telegram()` (Markdown parse_mode).
 
 ## v1.1 Sequencing — Updated
 1. ~~Telegram `.env` setup + delivery test~~ **DONE**
