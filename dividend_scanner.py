@@ -1079,6 +1079,26 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     render_reason_summary(results)
 
+    # ── Daily heartbeat (opt-in) ──────────────────────────────────────────────
+    if args.daily_heartbeat and not args.dry_run and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        skip_counts: dict[str, int] = {}
+        for row in results:
+            if not row.get("signal"):
+                reason = str(row.get("reason_category") or "unknown")
+                skip_counts[reason] = skip_counts.get(reason, 0) + 1
+        if skip_counts:
+            top_reason, top_count = max(skip_counts.items(), key=lambda kv: kv[1])
+            top_skip_str = f"{top_reason} {top_count}"
+        else:
+            top_skip_str = "none"
+        clean_count = len([s for s in signals if is_clean_signal(s.get("audit_flags", ""))])
+        hb_msg = (
+            f"DQP heartbeat {today} | scanned {len(tickers)} | "
+            f"{clean_count} clean signal(s) | top skip: {top_skip_str}"
+        )
+        send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, hb_msg, logger)
+        logger.info("Daily heartbeat sent.")
+
     console.rule()
     label = "[dim](dry-run)[/dim] " if args.dry_run else ""
     console.print(
@@ -1156,6 +1176,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--telegram-clean-only", action="store_true",
         help="Send Telegram alerts only for CLEAN signals (no low_yield_candidate or ex_date_too_close_candidate audit flags).",
+    )
+    parser.add_argument(
+        "--daily-heartbeat", action="store_true",
+        help="Send a single heartbeat Telegram after the scan (even on 0-signal days).",
     )
     parser.add_argument(
         "--audit-min-yield", type=float,
