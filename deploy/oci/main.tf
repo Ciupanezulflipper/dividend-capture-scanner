@@ -17,9 +17,9 @@ data "oci_core_images" "ubuntu_arm" {
 
 resource "oci_core_vcn" "dqp" {
   compartment_id = var.compartment_ocid
-  cidr_blocks     = ["10.42.0.0/16"]
-  display_name    = "dqp-vcn"
-  dns_label       = "dqpvcn"
+  cidr_blocks    = ["10.42.0.0/16"]
+  display_name   = "dqp-vcn"
+  dns_label      = "dqpvcn"
 }
 
 resource "oci_core_internet_gateway" "dqp" {
@@ -98,7 +98,7 @@ resource "oci_core_instance" "scanner" {
 
   metadata = {
     ssh_authorized_keys = var.ssh_public_key
-    user_data           = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
+    user_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
       bootstrap_b64 = base64encode(file("${path.module}/bootstrap.sh"))
     }))
   }
