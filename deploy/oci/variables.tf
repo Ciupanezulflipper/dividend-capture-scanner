@@ -29,6 +29,17 @@ variable "ssh_allowed_cidr" {
   }
 }
 
+variable "repo_ref" {
+  description = "Git branch or tag installed by cloud-init. Keep main for production."
+  type        = string
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/-]+$", var.repo_ref))
+    error_message = "repo_ref may contain only letters, digits, dot, underscore, slash, and hyphen."
+  }
+}
+
 variable "availability_domain_index" {
   description = "Zero-based availability-domain index. Change this if Always Free capacity is unavailable."
   type        = number
