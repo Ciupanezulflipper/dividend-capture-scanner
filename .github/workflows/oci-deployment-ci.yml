@@ -31,7 +31,7 @@ jobs:
           terraform_version: 1.8.5
 
       - name: Check Terraform formatting
-        run: terraform -chdir=deploy/oci fmt -check -recursive
+        run: terraform -chdir=deploy/oci fmt -diff -check -recursive
 
       - name: Initialize Terraform without backend
         run: terraform -chdir=deploy/oci init -backend=false
