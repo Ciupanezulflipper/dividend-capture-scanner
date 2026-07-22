@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate shell syntax
         run: |
@@ -30,8 +32,19 @@ jobs:
         with:
           terraform_version: 1.8.5
 
+      - name: Generate Terraform formatting patch
+        run: |
+          terraform -chdir=deploy/oci fmt -recursive
+          git diff -- deploy/oci > terraform-fmt.patch
+
+      - name: Upload Terraform formatting patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-fmt-patch
+          path: terraform-fmt.patch
+
       - name: Check Terraform formatting
-        run: terraform -chdir=deploy/oci fmt -diff -check -recursive
+        run: git diff --exit-code -- deploy/oci
 
       - name: Initialize Terraform without backend
         run: terraform -chdir=deploy/oci init -backend=false
