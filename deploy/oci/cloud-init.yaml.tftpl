@@ -1,0 +1,15 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+write_files:
+  - path: /var/tmp/dqp-bootstrap.sh
+    owner: root:root
+    permissions: '0755'
+    encoding: b64
+    content: ${bootstrap_b64}
+
+runcmd:
+  - [bash, /var/tmp/dqp-bootstrap.sh]
+
+final_message: "DQP OCI bootstrap completed after $UPTIME seconds"
