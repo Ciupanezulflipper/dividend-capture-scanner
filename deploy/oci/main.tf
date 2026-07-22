@@ -100,6 +100,7 @@ resource "oci_core_instance" "scanner" {
     ssh_authorized_keys = var.ssh_public_key
     user_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
       bootstrap_b64 = base64encode(file("${path.module}/bootstrap.sh"))
+      repo_ref      = var.repo_ref
     }))
   }
 
