@@ -1,0 +1,21 @@
+[Unit]
+Description=Dividend Quality Pullback scanner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dqp
+Group=dqp
+WorkingDirectory=/opt/dqp-scanner
+EnvironmentFile=/etc/dqp-scanner.env
+ExecStart=/usr/local/sbin/dqp-run-scanner
+TimeoutStartSec=45min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dqp-scanner /var/log/dqp-scanner
+
+[Install]
+WantedBy=multi-user.target
