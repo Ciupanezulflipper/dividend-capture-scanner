@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/Ciupanezulflipper/dividend-capture-scanner.git"
+REPO_REF="${DQP_REPO_REF:-main}"
 APP_DIR="/opt/dqp-scanner"
 STATE_DIR="/var/lib/dqp-scanner"
 LOG_DIR="/var/log/dqp-scanner"
@@ -24,11 +25,11 @@ fi
 
 if [[ -d "${APP_DIR}/.git" ]]; then
   git -C "${APP_DIR}" fetch --prune origin
-  git -C "${APP_DIR}" checkout main
-  git -C "${APP_DIR}" reset --hard origin/main
+  git -C "${APP_DIR}" checkout "${REPO_REF}"
+  git -C "${APP_DIR}" reset --hard "origin/${REPO_REF}"
 else
   rm -rf "${APP_DIR}"
-  git clone --branch main --single-branch "${REPO_URL}" "${APP_DIR}"
+  git clone --branch "${REPO_REF}" --single-branch "${REPO_URL}" "${APP_DIR}"
 fi
 
 python3 -m venv "${APP_DIR}/.venv"
@@ -64,5 +65,5 @@ install -m 0644 "${APP_DIR}/deploy/oci/systemd/dqp-watchdog.timer" /etc/systemd/
 
 systemctl daemon-reload
 
-echo "Bootstrap complete."
+echo "Bootstrap complete from ref ${REPO_REF}."
 echo "Next: sudo bash ${APP_DIR}/deploy/oci/configure.sh"
