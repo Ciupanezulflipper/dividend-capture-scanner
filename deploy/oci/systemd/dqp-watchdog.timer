@@ -1,0 +1,11 @@
+[Unit]
+Description=Check DQP completion at 11:00 New York time on weekdays
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 11:00:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=dqp-watchdog.service
+
+[Install]
+WantedBy=timers.target
