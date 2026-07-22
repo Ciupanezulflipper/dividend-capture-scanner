@@ -565,16 +565,19 @@ def build_telegram_message(
     yield_str = f"{dividend_yield_pct:.2f}%" if dividend_yield_pct is not None else "N/A"
     dist_pct = (price - ma) / ma * 100 if ma else 0.0
     ex_date_str = ex_date.strftime("%b %-d, %Y")
-    low_yield = dividend_yield_pct is not None and dividend_yield_pct < 1.0
-    ex_close = days_away < 7
-    if low_yield and ex_close:
-        grade = "⚠️ LOW YIELD | ⏰ EX-DATE CLOSE"
-    elif low_yield:
-        grade = "⚠️ LOW YIELD"
-    elif ex_close:
-        grade = "⏰ EX-DATE CLOSE"
-    else:
+    if clean:
         grade = "✅ CLEAN"
+    else:
+        low_yield = dividend_yield_pct is not None and dividend_yield_pct < 1.0
+        ex_close = days_away < 7
+        if low_yield and ex_close:
+            grade = "⚠️ LOW YIELD | ⏰ EX-DATE CLOSE"
+        elif low_yield:
+            grade = "⚠️ LOW YIELD"
+        elif ex_close:
+            grade = "⏰ EX-DATE CLOSE"
+        else:
+            grade = "⚠️ WATCHLIST"
     return (
         f"{header}\n"
         f"<b>Ticker:</b> <code>{symbol}</code>\n"
@@ -1115,8 +1118,8 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
             f"<b>Universe scanned:</b> <code>{len(tickers)}</code>\n"
             f"<b>Clean signals:</b> <code>{clean_count}</code>\n"
             f"<b>Top skip:</b> <code>{top_skip_str}</code>\n"
-            f"<b>Status:</b> Scanner running normally\n"
-            f"<b>Next run:</b> {nxt.strftime('%b %-d')} · 10:00 NY"
+            f"<b>Status:</b> Run completed\n"
+            f"<b>Next scheduled run:</b> {nxt.strftime('%b %-d')} · 10:00 NY"
         )
         send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, hb_msg, logger)
         logger.info("Daily heartbeat sent.")

@@ -20,17 +20,22 @@ BusyBox crond: NO
 
 **Symptom**: No Telegram heartbeat or signals after July 10.
 
-**Root cause**: DNS resolution fails at 10:00 AM NY cron time. All external hosts
-(`query1.finance.yahoo.com`, `en.wikipedia.org`, `api.telegram.org`) return
-`[Errno 7] No address associated with hostname`. The cron fires, the scanner runs,
-and audit reports are written — but 100% provider errors occur because network is
-unavailable at that time.
+**Observed failure mode**: During unattended cron runs at 10:00 AM NY, DNS
+resolution failed for all external hosts (`query1.finance.yahoo.com`,
+`en.wikipedia.org`, `api.telegram.org`), returning `[Errno 7] No address
+associated with hostname`. The cron fired, the scanner ran, and audit reports
+were written — but 100% provider errors occurred because no network was reachable.
 
 **Cron/crond status**: healthy throughout. Reports written every market day.
 
-**User action required**: Disable Android battery optimization for Termux so the
-network stack is active at 10:00 AM. Or keep the Termux app in the foreground/
-recent apps list.
+**Hypotheses (not proven root cause)**: Android background sleep, network
+interface availability, DNS resolver state, or device power management may
+suppress network during unattended cron runs. Termux was already configured as
+unrestricted in Android battery settings; disabling battery optimization is
+therefore not a confirmed fix. The actual trigger has not been identified.
+
+**Incident status**: OPEN — not resolved until a future unattended 10:00 AM NY
+cron run completes with Telegram delivery confirmed in `cron_dividend_bot.log`.
 
 ## Cron
 
