@@ -30,7 +30,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from io import StringIO
 from typing import Any, Optional
@@ -537,7 +537,7 @@ def send_telegram(token: str, chat_id: str, text: str, logger: logging.Logger) -
     try:
         resp = requests.post(
             url,
-            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
             timeout=15,
         )
         if resp.status_code == 200:
@@ -558,12 +558,13 @@ def build_telegram_message(
     ma: float,
     days_away: int,
     dividend_yield_pct: Optional[float],
+    audit_flags: str = "",
 ) -> str:
-    yield_line = (
-        f"Dividend Yield: `{dividend_yield_pct:.2f}%`\n"
-        if dividend_yield_pct is not None
-        else "Dividend Yield: `N/A`\n"
-    )
+    clean = is_clean_signal(audit_flags)
+    header = "✅ <b>DQP CLEAN SIGNAL</b>" if clean else "⚠️ <b>DQP WATCHLIST SIGNAL</b>"
+    yield_str = f"{dividend_yield_pct:.2f}%" if dividend_yield_pct is not None else "N/A"
+    dist_pct = (price - ma) / ma * 100 if ma else 0.0
+    ex_date_str = ex_date.strftime("%b %-d, %Y")
     low_yield = dividend_yield_pct is not None and dividend_yield_pct < 1.0
     ex_close = days_away < 7
     if low_yield and ex_close:
@@ -575,13 +576,16 @@ def build_telegram_message(
     else:
         grade = "✅ CLEAN"
     return (
-        f"*Dividend Quality Pullback Signal*\n"
-        f"Ticker: `{symbol}`\n"
-        f"Ex-Div Date: `{ex_date}` ({days_away}d away)\n"
-        f"{yield_line}"
-        f"Price: `${price:.2f}`  |  MA: `${ma:.2f}`\n"
-        f"RSI(14): `{rsi:.1f}`\n"
-        f"Grade: {grade}"
+        f"{header}\n"
+        f"<b>Ticker:</b> <code>{symbol}</code>\n"
+        f"<b>Ex-dividend date:</b> <code>{ex_date_str}</code> ({days_away}d away)\n"
+        f"<b>Yield:</b> <code>{yield_str}</code>\n"
+        f"<b>Price:</b> <code>${price:.2f}</code>\n"
+        f"<b>MA200:</b> <code>${ma:.2f}</code>\n"
+        f"<b>Distance vs MA200:</b> <code>{dist_pct:+.1f}%</code>\n"
+        f"<b>RSI(14):</b> <code>{rsi:.1f}</code>\n"
+        f"<b>Status:</b> {grade}\n"
+        f"<b>Action:</b> Review chart before entry"
     )
 
 
@@ -1039,6 +1043,7 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                     ma=sig["ma"],
                     days_away=sig["days_away"],
                     dividend_yield_pct=sig.get("dividend_yield_pct"),
+                    audit_flags=sig.get("audit_flags", ""),
                 )
                 sent = send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg, logger)
                 logger.info(
@@ -1088,13 +1093,30 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                 skip_counts[reason] = skip_counts.get(reason, 0) + 1
         if skip_counts:
             top_reason, top_count = max(skip_counts.items(), key=lambda kv: kv[1])
-            top_skip_str = f"{top_reason} {top_count}"
+            _skip_labels = {
+                "stale_or_past_ex_date": "stale/past ex-date",
+                "no_ex_date_available": "no ex-date",
+                "ex_date_outside_window": "ex-date outside window",
+                "yfinance_error": "data error",
+                "technical_failed_rsi": "RSI filter",
+                "technical_failed_ma200": "MA200 filter",
+            }
+            top_skip_label = _skip_labels.get(top_reason, top_reason.replace("_", " "))
+            top_skip_str = f"{top_skip_label} ({top_count})"
         else:
             top_skip_str = "none"
         clean_count = len([s for s in signals if is_clean_signal(s.get("audit_flags", ""))])
+        nxt = today + timedelta(days=1)
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
         hb_msg = (
-            f"DQP heartbeat {today} | scanned {len(tickers)} | "
-            f"{clean_count} clean signal(s) | top skip: {top_skip_str}"
+            f"📡 <b>DQP DAILY HEARTBEAT</b>\n"
+            f"<b>Date:</b> <code>{today.strftime('%b %-d, %Y')}</code>\n"
+            f"<b>Universe scanned:</b> <code>{len(tickers)}</code>\n"
+            f"<b>Clean signals:</b> <code>{clean_count}</code>\n"
+            f"<b>Top skip:</b> <code>{top_skip_str}</code>\n"
+            f"<b>Status:</b> Scanner running normally\n"
+            f"<b>Next run:</b> {nxt.strftime('%b %-d')} · 10:00 NY"
         )
         send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, hb_msg, logger)
         logger.info("Daily heartbeat sent.")
