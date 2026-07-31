@@ -822,15 +822,6 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
         f"days_to_ex_date >= {args.audit_min_days_to_ex_date}d[/dim]"
     )
 
-    if not HAS_YFINANCE:
-        console.print("[red]yfinance not installed — cannot proceed.[/red]")
-        sys.exit(1)
-
-    tickers = fetch_sp500_tickers(logger)
-    if args.limit:
-        tickers = tickers[: args.limit]
-        logger.info("Limiting scan to first %d tickers.", args.limit)
-
     if args.dry_run:
         history = {}
     else:
@@ -844,6 +835,15 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                 "Signals are blocked until history is recovered."
             )
             raise SystemExit(2) from exc
+
+    if not HAS_YFINANCE:
+        console.print("[red]yfinance not installed — cannot proceed.[/red]")
+        sys.exit(1)
+
+    tickers = fetch_sp500_tickers(logger)
+    if args.limit:
+        tickers = tickers[: args.limit]
+        logger.info("Limiting scan to first %d tickers.", args.limit)
 
     results: list[dict] = []
     signals: list[dict] = []
