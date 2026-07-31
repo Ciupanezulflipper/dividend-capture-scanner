@@ -1,0 +1,47 @@
+name: Scanner reliability validation
+
+on:
+  pull_request:
+    paths:
+      - "run_bot.sh"
+      - "tools/run_production_scan.py"
+      - "tests/test_production_runner.py"
+      - ".github/workflows/scanner-reliability.yml"
+  push:
+    branches: [main]
+    paths:
+      - "run_bot.sh"
+      - "tools/run_production_scan.py"
+      - "tests/test_production_runner.py"
+      - ".github/workflows/scanner-reliability.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reliability-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate shell syntax
+        run: bash -n run_bot.sh
+
+      - name: Validate Python syntax
+        run: python -m py_compile tools/run_production_scan.py tests/test_production_runner.py
+
+      - name: Run offline reliability tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Guard against automatic dependency upgrades
+        run: |
+          if grep -n -- '--upgrade pip setuptools wheel' run_bot.sh; then
+            echo 'Routine launcher must not upgrade packaging tools.' >&2
+            exit 1
+          fi
