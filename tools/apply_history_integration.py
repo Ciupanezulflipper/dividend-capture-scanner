@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""One-time deterministic refactor to fail on history state before network I/O."""
+"""One-time deterministic refactor to fail on history state before network I/O.
+
+Revision 2 retriggers the exact transform from the latest branch head.
+"""
 
 from __future__ import annotations
 
