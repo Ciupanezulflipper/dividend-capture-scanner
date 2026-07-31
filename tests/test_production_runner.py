@@ -10,7 +10,9 @@ from tools.run_production_scan import (
     audit_report,
     audit_telegram,
     contains_provider_error,
+    discover_fresh_artifact,
     resolve_report_dir,
+    snapshot_artifacts,
 )
 
 
@@ -71,6 +73,21 @@ class ProductionRunnerTests(unittest.TestCase):
             self.assertEqual(result.provider_failure_rate, 0.9)
             self.assertTrue(result.is_collapsed)
 
+    def test_unchanged_same_day_artifact_is_not_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = directory / "scan_health_2026-07-31.json"
+            path.write_text("{}", encoding="utf-8")
+            before = snapshot_artifacts(directory, "scan_health_*.json")
+            self.assertIsNone(
+                discover_fresh_artifact(directory, "scan_health_*.json", before)
+            )
+            path.write_text('{"is_collapsed": false}', encoding="utf-8")
+            self.assertEqual(
+                discover_fresh_artifact(directory, "scan_health_*.json", before),
+                path,
+            )
+
     def test_telegram_false_success_log_is_rejected_when_failure_precedes_it(self) -> None:
         log_delta = "\n".join(
             (
@@ -104,6 +121,16 @@ class ProductionRunnerTests(unittest.TestCase):
             credentials_present=False,
         )
         self.assertFalse(missing_credentials.delivery_verified)
+
+    def test_no_signal_no_heartbeat_run_does_not_require_credentials(self) -> None:
+        result = audit_telegram(
+            "No alerts delivered — history not modified.",
+            [],
+            scanner_collapsed=False,
+            credentials_present=False,
+        )
+        self.assertFalse(result.delivery_required)
+        self.assertTrue(result.delivery_verified)
 
     def test_dry_run_does_not_require_telegram(self) -> None:
         result = audit_telegram(
