@@ -41,11 +41,26 @@ def _log(logger: logging.Logger | None, level: int, message: str, *args: Any) ->
         logger.log(level, message, *args)
 
 
+def validate_history_snapshot(payload: Any) -> History:
+    """Validate the persisted history shape without assuming optional fields."""
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"history root must be a JSON object, got {type(payload).__name__}"
+        )
+    invalid_keys = [
+        key for key, value in payload.items() if not isinstance(value, dict)
+    ]
+    if invalid_keys:
+        preview = ", ".join(str(key) for key in invalid_keys[:3])
+        raise ValueError(
+            f"history entries must be JSON objects; invalid keys: {preview}"
+        )
+    return payload
+
+
 def _read_snapshot(path: Path) -> History:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"history root must be a JSON object, got {type(payload).__name__}")
-    return payload
+    return validate_history_snapshot(payload)
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -121,9 +136,11 @@ def _serialize_json_object(value: dict[str, Any]) -> bytes:
 
 
 def _serialize(history: History) -> bytes:
-    if not isinstance(history, dict):
-        raise TypeError("history must be a dictionary")
-    return _serialize_json_object(history)
+    try:
+        validated = validate_history_snapshot(history)
+    except ValueError as exc:
+        raise TypeError(str(exc)) from exc
+    return _serialize_json_object(validated)
 
 
 def _write_recovery_marker(
