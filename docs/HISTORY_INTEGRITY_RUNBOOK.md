@@ -37,7 +37,7 @@ marker remains until a valid snapshot is restored.
 From the repository root:
 
 ```bash
-python3 tools/history_recovery.py --history-file history.json status
+python3 -m tools.history_recovery --history-file history.json status
 ```
 
 Review:
@@ -82,7 +82,7 @@ both snapshots, clears the marker only after successful writes, reloads the
 result, and verifies exact equality.
 
 ```bash
-python3 tools/history_recovery.py \
+python3 -m tools.history_recovery \
   --history-file history.json \
   restore \
   --from-file "<candidate-file>" \
@@ -98,7 +98,7 @@ RESTORE_STATUS=PASSED entries=<N> source=<candidate-file>
 Then inspect again:
 
 ```bash
-python3 tools/history_recovery.py --history-file history.json status
+python3 -m tools.history_recovery --history-file history.json status
 ```
 
 Acceptance conditions:
