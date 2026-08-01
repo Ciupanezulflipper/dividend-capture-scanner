@@ -4,6 +4,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,6 +30,27 @@ class HistoryRecoveryToolTests(unittest.TestCase):
             self.assertEqual(payload["history"]["entries"], 1)
             self.assertFalse(payload["backup"]["exists"])
             self.assertFalse(payload["recovery_marker"]["exists"])
+
+    def test_module_cli_status_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            history_file = Path(tmp) / "history.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "tools.history_recovery",
+                    "--history-file",
+                    str(history_file),
+                    "status",
+                ],
+                cwd=Path(__file__).resolve().parent.parent,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertFalse(payload["history"]["exists"])
 
     def test_restore_requires_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
