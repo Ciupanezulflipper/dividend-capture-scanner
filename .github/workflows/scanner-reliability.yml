@@ -4,19 +4,24 @@ on:
   pull_request:
     paths:
       - "dividend_scanner.py"
+      - "quality_scanner.py"
+      - "signal_quality_audit.py"
       - "history_store.py"
       - "telegram_delivery.py"
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tools/run_quality_production_scan.py"
       - "tools/termux_gate_core.py"
       - "tools/termux_gate_runtime.py"
       - "tools/termux_operational_gate.py"
       - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
+      - "tests/test_quality_scanner_integration.py"
       - "tests/test_scanner_history_integration.py"
       - "tests/test_scanner_telegram_integration.py"
+      - "tests/test_signal_quality_audit.py"
       - "tests/test_telegram_delivery.py"
       - "tests/test_termux_operational_gate.py"
       - "docs/TERMUX_OPERATIONAL_GATE.md"
@@ -26,19 +31,24 @@ on:
     branches: [main]
     paths:
       - "dividend_scanner.py"
+      - "quality_scanner.py"
+      - "signal_quality_audit.py"
       - "history_store.py"
       - "telegram_delivery.py"
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tools/run_quality_production_scan.py"
       - "tools/termux_gate_core.py"
       - "tools/termux_gate_runtime.py"
       - "tools/termux_operational_gate.py"
       - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
+      - "tests/test_quality_scanner_integration.py"
       - "tests/test_scanner_history_integration.py"
       - "tests/test_scanner_telegram_integration.py"
+      - "tests/test_signal_quality_audit.py"
       - "tests/test_telegram_delivery.py"
       - "tests/test_termux_operational_gate.py"
       - "docs/TERMUX_OPERATIONAL_GATE.md"
@@ -72,18 +82,23 @@ jobs:
         run: >-
           python -m py_compile
           dividend_scanner.py
+          quality_scanner.py
+          signal_quality_audit.py
           history_store.py
           telegram_delivery.py
           tools/history_recovery.py
           tools/run_production_scan.py
+          tools/run_quality_production_scan.py
           tools/termux_gate_core.py
           tools/termux_gate_runtime.py
           tools/termux_operational_gate.py
           tests/test_history_recovery.py
           tests/test_history_store.py
           tests/test_production_runner.py
+          tests/test_quality_scanner_integration.py
           tests/test_scanner_history_integration.py
           tests/test_scanner_telegram_integration.py
+          tests/test_signal_quality_audit.py
           tests/test_telegram_delivery.py
           tests/test_termux_operational_gate.py
 

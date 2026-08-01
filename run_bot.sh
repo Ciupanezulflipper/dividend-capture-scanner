@@ -20,8 +20,10 @@ cd "$SCRIPT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
 REQ_FILE="requirements.txt"
-MAIN_SCRIPT="dividend_scanner.py"
-RUNNER_SCRIPT="tools/run_production_scan.py"
+BASE_MAIN_SCRIPT="dividend_scanner.py"
+MAIN_SCRIPT="quality_scanner.py"
+BASE_RUNNER_SCRIPT="tools/run_production_scan.py"
+RUNNER_SCRIPT="tools/run_quality_production_scan.py"
 TERMUX_STAMP=".termux_req_sha256"
 LINUX_STAMP="$VENV_DIR/.req_sha256"
 
@@ -75,7 +77,9 @@ if [ "${1:-}" = "--install-deps" ]; then
 fi
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "python3 not found"
+[ -f "$BASE_MAIN_SCRIPT" ] || die "$BASE_MAIN_SCRIPT not found in $SCRIPT_DIR"
 [ -f "$MAIN_SCRIPT" ] || die "$MAIN_SCRIPT not found in $SCRIPT_DIR"
+[ -f "$BASE_RUNNER_SCRIPT" ] || die "$BASE_RUNNER_SCRIPT not found in $SCRIPT_DIR"
 [ -f "$RUNNER_SCRIPT" ] || die "$RUNNER_SCRIPT not found in $SCRIPT_DIR"
 [ -f "$REQ_FILE" ] || die "$REQ_FILE not found in $SCRIPT_DIR"
 
@@ -109,7 +113,12 @@ fi
   || die "A required Python package is missing. Run ./run_bot.sh --install-deps."
 pass "Required Python imports available."
 
-"$PYTHON_BIN" -m py_compile "$MAIN_SCRIPT" "$RUNNER_SCRIPT" \
+"$PYTHON_BIN" -m py_compile \
+  "$BASE_MAIN_SCRIPT" \
+  "$MAIN_SCRIPT" \
+  "signal_quality_audit.py" \
+  "$BASE_RUNNER_SCRIPT" \
+  "$RUNNER_SCRIPT" \
   || die "Python syntax validation failed"
 pass "Python syntax OK."
 
