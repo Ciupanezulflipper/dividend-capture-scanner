@@ -3,16 +3,30 @@ name: Scanner reliability validation
 on:
   pull_request:
     paths:
+      - "dividend_scanner.py"
+      - "history_store.py"
       - "run_bot.sh"
+      - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tests/test_history_recovery.py"
+      - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
+      - "tests/test_scanner_history_integration.py"
+      - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
   push:
     branches: [main]
     paths:
+      - "dividend_scanner.py"
+      - "history_store.py"
       - "run_bot.sh"
+      - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tests/test_history_recovery.py"
+      - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
+      - "tests/test_scanner_history_integration.py"
+      - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
 
 permissions:
@@ -24,17 +38,31 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      - name: Validate repository diff
+        run: git diff --check HEAD^ HEAD
+
       - name: Validate shell syntax
         run: bash -n run_bot.sh
 
       - name: Validate Python syntax
-        run: python -m py_compile tools/run_production_scan.py tests/test_production_runner.py
+        run: >-
+          python -m py_compile
+          dividend_scanner.py
+          history_store.py
+          tools/history_recovery.py
+          tools/run_production_scan.py
+          tests/test_history_recovery.py
+          tests/test_history_store.py
+          tests/test_production_runner.py
+          tests/test_scanner_history_integration.py
 
       - name: Run offline reliability tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v

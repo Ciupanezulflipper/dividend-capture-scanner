@@ -6,7 +6,9 @@
 # Runtime state
 history.json
 history*.json
-*.corrupt.*.json
+history*.last-good
+history*.recovery-required
+*.corrupt.*
 scan_health_*.json
 
 # Logs

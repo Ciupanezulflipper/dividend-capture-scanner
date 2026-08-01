@@ -35,6 +35,8 @@ from pathlib import Path
 from io import StringIO
 from typing import Any, Optional
 
+from history_store import HistoryRecoveryRequired, load_history, save_history
+
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -499,18 +501,7 @@ def compute_ma(close: pd.Series, length: int = 200) -> Optional[float]:
 
 
 # ── History (deduplication) ───────────────────────────────────────────────────
-
-def load_history(path: Path) -> dict:
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
-
-
-def save_history(path: Path, history: dict) -> None:
-    path.write_text(json.dumps(history, indent=2, default=str), encoding="utf-8")
+# Crash-safe load/save operations are implemented in history_store.py.
 
 
 def alert_key(symbol: str, ex_date: date) -> str:
@@ -831,6 +822,20 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
         f"days_to_ex_date >= {args.audit_min_days_to_ex_date}d[/dim]"
     )
 
+    if args.dry_run:
+        history = {}
+    else:
+        try:
+            history = load_history(HISTORY_FILE, logger=logger)
+        except HistoryRecoveryRequired as exc:
+            logger.critical("HISTORY_RECOVERY_REQUIRED | %s", exc)
+            console.print(
+                "[bold red]HISTORY_RECOVERY_REQUIRED[/bold red] — "
+                "no valid alert-history snapshot remains. "
+                "Signals are blocked until history is recovered."
+            )
+            raise SystemExit(2) from exc
+
     if not HAS_YFINANCE:
         console.print("[red]yfinance not installed — cannot proceed.[/red]")
         sys.exit(1)
@@ -839,8 +844,6 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
     if args.limit:
         tickers = tickers[: args.limit]
         logger.info("Limiting scan to first %d tickers.", args.limit)
-
-    history = {} if args.dry_run else load_history(HISTORY_FILE)
 
     results: list[dict] = []
     signals: list[dict] = []
@@ -1068,7 +1071,7 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     if not args.dry_run:
         if delivered:
-            save_history(HISTORY_FILE, history)
+            save_history(HISTORY_FILE, history, logger=logger)
             logger.info(
                 "History saved (%d entries). Delivered: %s",
                 len(history),
