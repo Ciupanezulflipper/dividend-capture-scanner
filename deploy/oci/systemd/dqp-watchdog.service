@@ -1,0 +1,16 @@
+[Unit]
+Description=Check for a missed healthy DQP scan
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dqp
+Group=dqp
+EnvironmentFile=/etc/dqp-scanner.env
+ExecStart=/usr/local/sbin/dqp-watchdog
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dqp-scanner

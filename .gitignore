@@ -62,3 +62,12 @@ reports/performance_audit_*
 
 # Local Termux dependency stamp
 .termux_req_sha256
+
+# Terraform local state and sensitive values
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log

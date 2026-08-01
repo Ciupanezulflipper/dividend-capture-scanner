@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DQP scanner at 10:00 New York time on weekdays
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 10:00:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=dqp-scanner.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,7 @@
+tenancy_ocid              = "ocid1.tenancy.oc1..replace_me"
+region                    = "eu-frankfurt-1"
+compartment_ocid          = "ocid1.compartment.oc1..replace_me"
+ssh_public_key            = "ssh-ed25519 AAAA... replace_me"
+ssh_allowed_cidr          = "203.0.113.10/32"
+repo_ref                  = "main"
+availability_domain_index = 0
