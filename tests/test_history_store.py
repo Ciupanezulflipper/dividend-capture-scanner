@@ -14,6 +14,7 @@ from history_store import (
     backup_path,
     load_history,
     recovery_marker_path,
+    restore_history,
     save_history,
 )
 
@@ -97,6 +98,22 @@ class HistoryStoreTests(unittest.TestCase):
             self.assertFalse(recovery_marker_path(path).exists())
             self.assertEqual(json.loads(backup_path(path).read_text()), restored)
 
+    def test_explicit_restore_clears_marker_and_rebuilds_both_snapshots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.json"
+            recovery_marker_path(path).write_text("blocked", encoding="utf-8")
+            restored = {"a": {"symbol": "AEP"}, "b": {"symbol": "UDR"}}
+
+            restore_history(path, restored)
+
+            self.assertFalse(recovery_marker_path(path).exists())
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), restored)
+            self.assertEqual(
+                json.loads(backup_path(path).read_text(encoding="utf-8")),
+                restored,
+            )
+            self.assertEqual(load_history(path), restored)
+
     def test_save_is_blocked_while_recovery_marker_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "history.json"
@@ -171,6 +188,17 @@ class HistoryStoreTests(unittest.TestCase):
             path.write_text(json.dumps({"a": {}}), encoding="utf-8")
             backup_path(path).write_text(json.dumps({"b": {}}), encoding="utf-8")
 
+            with self.assertRaises(HistoryRecoveryRequired):
+                load_history(path)
+            self.assertTrue(recovery_marker_path(path).exists())
+
+    def test_dictionary_with_non_object_entry_is_corruption(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.json"
+            path.write_text(
+                json.dumps({"reason": "not alert history"}),
+                encoding="utf-8",
+            )
             with self.assertRaises(HistoryRecoveryRequired):
                 load_history(path)
             self.assertTrue(recovery_marker_path(path).exists())
