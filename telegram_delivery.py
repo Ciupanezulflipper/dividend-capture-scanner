@@ -9,8 +9,6 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any, Callable
 
-import requests
-
 TELEGRAM_LOG_PREFIX = "TELEGRAM_DELIVERY "
 
 
@@ -49,12 +47,14 @@ def send_telegram(
     kind: str,
     subject: str = "",
     required: bool = True,
-    post: Callable[..., Any] = requests.post,
+    post: Callable[..., Any] | None = None,
 ) -> TelegramDeliveryResult:
     """Send one Telegram message and return the verified API outcome.
 
     HTTP 200 alone is insufficient: Telegram's JSON body must also contain
     ``{"ok": true}``. Credentials and message content are never logged.
+    The requests dependency is loaded only for a real send so offline tests can
+    import and exercise this module without installing runtime dependencies.
     """
     if not token or not chat_id:
         result = TelegramDeliveryResult(
@@ -70,6 +70,11 @@ def send_telegram(
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
+        if post is None:
+            import requests
+
+            post = requests.post
+
         response = post(
             url,
             json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
