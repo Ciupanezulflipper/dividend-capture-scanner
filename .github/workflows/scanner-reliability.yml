@@ -6,7 +6,9 @@ on:
       - "dividend_scanner.py"
       - "history_store.py"
       - "run_bot.sh"
+      - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
@@ -18,7 +20,9 @@ on:
       - "dividend_scanner.py"
       - "history_store.py"
       - "run_bot.sh"
+      - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
@@ -51,7 +55,9 @@ jobs:
           python -m py_compile
           dividend_scanner.py
           history_store.py
+          tools/history_recovery.py
           tools/run_production_scan.py
+          tests/test_history_recovery.py
           tests/test_history_store.py
           tests/test_production_runner.py
           tests/test_scanner_history_integration.py
