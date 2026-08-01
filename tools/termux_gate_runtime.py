@@ -128,7 +128,10 @@ def git_audit(repo: Path, expected: str, runner: Runner = run) -> list[dict[str,
 
 
 def latest_health(repo: Path) -> dict[str, Any]:
-    files = list(repo.glob("run_health_*.json")) + list((repo / "reports").glob("run_health_*.json"))
+    files = list(repo.glob("run_health_*.json"))
+    reports = repo / "reports"
+    if reports.is_dir():
+        files.extend(reports.rglob("run_health_*.json"))
     files = [path for path in files if path.is_file()]
     if not files:
         return check("latest_run_health", "WARN", False, "not found")
