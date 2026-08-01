@@ -59,3 +59,5 @@ jobs:
           git diff --cached --quiet && exit 1
           git commit -m "fix: make Telegram delivery outcomes truthful"
           git push origin HEAD:fix/telegram-delivery-truth-20260731
+
+# Revision 2: retrigger after workflow creation so the branch workflow is active.
