@@ -9,12 +9,17 @@ on:
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tools/termux_gate_core.py"
+      - "tools/termux_gate_runtime.py"
+      - "tools/termux_operational_gate.py"
       - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
       - "tests/test_scanner_telegram_integration.py"
       - "tests/test_telegram_delivery.py"
+      - "tests/test_termux_operational_gate.py"
+      - "docs/TERMUX_OPERATIONAL_GATE.md"
       - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
   push:
@@ -26,12 +31,17 @@ on:
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
+      - "tools/termux_gate_core.py"
+      - "tools/termux_gate_runtime.py"
+      - "tools/termux_operational_gate.py"
       - "tests/test_history_recovery.py"
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
       - "tests/test_scanner_telegram_integration.py"
       - "tests/test_telegram_delivery.py"
+      - "tests/test_termux_operational_gate.py"
+      - "docs/TERMUX_OPERATIONAL_GATE.md"
       - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
 
@@ -66,12 +76,16 @@ jobs:
           telegram_delivery.py
           tools/history_recovery.py
           tools/run_production_scan.py
+          tools/termux_gate_core.py
+          tools/termux_gate_runtime.py
+          tools/termux_operational_gate.py
           tests/test_history_recovery.py
           tests/test_history_store.py
           tests/test_production_runner.py
           tests/test_scanner_history_integration.py
           tests/test_scanner_telegram_integration.py
           tests/test_telegram_delivery.py
+          tests/test_termux_operational_gate.py
 
       - name: Run offline reliability tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
