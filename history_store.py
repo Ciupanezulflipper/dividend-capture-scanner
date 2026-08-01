@@ -299,6 +299,32 @@ def load_history(path: Path, logger: logging.Logger | None = None) -> History:
     return primary_data
 
 
+def restore_history(
+    path: Path,
+    history: History,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Explicitly restore a validated snapshot and clear a recovery block.
+
+    This operation is intentionally separate from save_history so normal scanner
+    execution can never bypass a recovery marker.
+    """
+    path = Path(path)
+    backup = backup_path(path)
+    payload = _serialize(history)
+    _atomic_write_bytes(backup, payload)
+    _atomic_write_bytes(path, payload)
+    _clear_recovery_marker(path, logger)
+    _log(
+        logger,
+        logging.WARNING,
+        "History explicitly restored | primary=%s backup=%s entries=%d",
+        path,
+        backup,
+        len(history),
+    )
+
+
 def save_history(
     path: Path,
     history: History,
