@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from tools.run_production_scan import (
+    _status_exit_code,
     audit_report,
     audit_telegram,
     contains_provider_error,
@@ -141,6 +143,56 @@ class ProductionRunnerTests(unittest.TestCase):
         )
         self.assertFalse(result.delivery_required)
         self.assertTrue(result.delivery_verified)
+
+    def test_structured_heartbeat_success_is_verified(self) -> None:
+        payload = {
+            "kind": "heartbeat",
+            "subject": "2026-07-31",
+            "required": True,
+            "attempted": True,
+            "delivered": True,
+            "outcome": "delivered",
+            "status_code": 200,
+            "detail": "",
+        }
+        result = audit_telegram(
+            "TELEGRAM_DELIVERY " + json.dumps(payload),
+            ["--daily-heartbeat"],
+            scanner_collapsed=False,
+            credentials_present=True,
+        )
+        self.assertTrue(result.heartbeat_claimed)
+        self.assertTrue(result.delivery_verified)
+        self.assertEqual(result.required_failure_count, 0)
+
+    def test_structured_required_failure_is_rejected(self) -> None:
+        payload = {
+            "kind": "admin_warning",
+            "subject": "DATA_PROVIDER_FAILURE",
+            "required": True,
+            "attempted": True,
+            "delivered": False,
+            "outcome": "transport_error",
+            "status_code": None,
+            "detail": "NameResolutionError",
+        }
+        result = audit_telegram(
+            "TELEGRAM_DELIVERY " + json.dumps(payload),
+            [],
+            scanner_collapsed=True,
+            credentials_present=True,
+        )
+        self.assertFalse(result.admin_warning_claimed)
+        self.assertFalse(result.delivery_verified)
+        self.assertEqual(result.required_failure_count, 1)
+
+    def test_scanner_exit_23_remains_telegram_exit_23(self) -> None:
+        self.assertEqual(
+            _status_exit_code(
+                ["scanner_exit_code=23", "telegram_delivery_not_verified"]
+            ),
+            23,
+        )
 
 
 if __name__ == "__main__":

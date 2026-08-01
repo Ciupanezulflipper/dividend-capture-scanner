@@ -5,6 +5,7 @@ on:
     paths:
       - "dividend_scanner.py"
       - "history_store.py"
+      - "telegram_delivery.py"
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
@@ -12,6 +13,8 @@ on:
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
+      - "tests/test_scanner_telegram_integration.py"
+      - "tests/test_telegram_delivery.py"
       - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
   push:
@@ -19,6 +22,7 @@ on:
     paths:
       - "dividend_scanner.py"
       - "history_store.py"
+      - "telegram_delivery.py"
       - "run_bot.sh"
       - "tools/history_recovery.py"
       - "tools/run_production_scan.py"
@@ -26,6 +30,8 @@ on:
       - "tests/test_history_store.py"
       - "tests/test_production_runner.py"
       - "tests/test_scanner_history_integration.py"
+      - "tests/test_scanner_telegram_integration.py"
+      - "tests/test_telegram_delivery.py"
       - ".gitignore"
       - ".github/workflows/scanner-reliability.yml"
 
@@ -57,12 +63,15 @@ jobs:
           python -m py_compile
           dividend_scanner.py
           history_store.py
+          telegram_delivery.py
           tools/history_recovery.py
           tools/run_production_scan.py
           tests/test_history_recovery.py
           tests/test_history_store.py
           tests/test_production_runner.py
           tests/test_scanner_history_integration.py
+          tests/test_scanner_telegram_integration.py
+          tests/test_telegram_delivery.py
 
       - name: Run offline reliability tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v

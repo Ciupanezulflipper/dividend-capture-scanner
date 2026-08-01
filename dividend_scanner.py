@@ -36,6 +36,7 @@ from io import StringIO
 from typing import Any, Optional
 
 from history_store import HistoryRecoveryRequired, load_history, save_history
+from telegram_delivery import send_telegram
 
 import pandas as pd
 import requests
@@ -523,24 +524,6 @@ def record_alert(history: dict, symbol: str, ex_date: date, data: dict) -> None:
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 
-def send_telegram(token: str, chat_id: str, text: str, logger: logging.Logger) -> bool:
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try:
-        resp = requests.post(
-            url,
-            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            return True
-        logger.warning("Telegram API error %s: %s", resp.status_code, resp.text[:200])
-        return False
-    except Exception as exc:
-        sanitized = re.sub(r"/bot[^/\s]+/", "/bot[REDACTED]/", str(exc))
-        logger.warning("Telegram send failed: %s", sanitized)
-        return False
-
-
 def build_telegram_message(
     symbol: str,
     ex_date: date,
@@ -1008,7 +991,8 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
             f"price_count={run_quality['price_count']}  "
             f"History write: BLOCKED  Signals sent: 0"
         )
-        if not args.dry_run and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        admin_delivery_failed = False
+        if not args.dry_run and not args.no_telegram:
             admin_msg = (
                 f"\u26a0\ufe0f SCANNER: DATA_PROVIDER_FAILURE\n"
                 f"Date: {today}\n"
@@ -1017,14 +1001,24 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                 f"History write: BLOCKED\n"
                 f"Signals sent: 0"
             )
-            send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, admin_msg, logger)
-            logger.info("Admin Telegram warning sent.")
+            admin_result = send_telegram(
+                TELEGRAM_TOKEN,
+                TELEGRAM_CHAT_ID,
+                admin_msg,
+                logger,
+                kind="admin_warning",
+                subject="DATA_PROVIDER_FAILURE",
+            )
+            admin_delivery_failed = not admin_result.delivered
         if report_path is not None:
             console.print(f"[cyan]Audit report:[/cyan] {report_path}")
+        if admin_delivery_failed:
+            raise SystemExit(23)
         sys.exit(0)
 
     # ── Not collapsed: send signal Telegrams, write history ──────────────────
     delivered: list[str] = []
+    required_delivery_failures: list[str] = []
 
     for sig in signals:
         sym = sig["symbol"]
@@ -1051,13 +1045,15 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                     dividend_yield_pct=sig.get("dividend_yield_pct"),
                     audit_flags=sig.get("audit_flags", ""),
                 )
-                sent = send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg, logger)
-                logger.info(
-                    "Telegram alert for %s: %s",
-                    sym,
-                    "sent" if sent else "FAILED",
+                signal_result = send_telegram(
+                    TELEGRAM_TOKEN,
+                    TELEGRAM_CHAT_ID,
+                    msg,
+                    logger,
+                    kind="signal",
+                    subject=sym,
                 )
-                if sent:
+                if signal_result.delivered:
                     record_alert(history, sym, ex, {
                         "price": sig["price"],
                         "rsi": sig["rsi"],
@@ -1066,6 +1062,8 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
                         "dividend_yield_pct": sig.get("dividend_yield_pct"),
                     })
                     delivered.append(sym)
+                else:
+                    required_delivery_failures.append(f"signal:{sym}")
         else:
             logger.debug("%s already alerted for ex-date %s.", sym, ex)
 
@@ -1091,7 +1089,7 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
     render_reason_summary(results)
 
     # ── Daily heartbeat (opt-in) ──────────────────────────────────────────────
-    if args.daily_heartbeat and not args.dry_run and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+    if args.daily_heartbeat and not args.dry_run and not args.no_telegram:
         skip_counts: dict[str, int] = {}
         for row in results:
             if not row.get("signal"):
@@ -1124,8 +1122,16 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
             f"<b>Status:</b> Run completed\n"
             f"<b>Next scheduled run:</b> {nxt.strftime('%b %-d')} · 10:00 NY"
         )
-        send_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, hb_msg, logger)
-        logger.info("Daily heartbeat sent.")
+        heartbeat_result = send_telegram(
+            TELEGRAM_TOKEN,
+            TELEGRAM_CHAT_ID,
+            hb_msg,
+            logger,
+            kind="heartbeat",
+            subject=str(today),
+        )
+        if not heartbeat_result.delivered:
+            required_delivery_failures.append("heartbeat")
 
     console.rule()
     label = "[dim](dry-run)[/dim] " if args.dry_run else ""
@@ -1135,6 +1141,14 @@ def scan(args: argparse.Namespace, logger: logging.Logger) -> None:
     )
     if report_path is not None:
         console.print(f"[cyan]Audit report:[/cyan] {report_path}")
+
+    if required_delivery_failures:
+        logger.error(
+            "TELEGRAM_REQUIRED_DELIVERY_FAILED count=%d items=%s",
+            len(required_delivery_failures),
+            ",".join(required_delivery_failures),
+        )
+        raise SystemExit(23)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

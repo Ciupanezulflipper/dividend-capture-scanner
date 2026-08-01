@@ -61,6 +61,7 @@ TELEGRAM_FAILURE_MARKERS = (
     "Telegram send failed:",
     "Telegram API error ",
 )
+TELEGRAM_LOG_PREFIX = "TELEGRAM_DELIVERY "
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class TelegramAudit:
     signal_attempt_count: int
     signal_success_count: int
     signal_failure_count: int
+    required_failure_count: int
     failure_line_count: int
     delivery_verified: bool
 
@@ -288,6 +290,22 @@ def _load_json(path: Path | None) -> dict[str, Any] | None:
         return None
 
 
+def parse_structured_telegram_deliveries(log_delta: str) -> list[dict[str, Any]]:
+    deliveries: list[dict[str, Any]] = []
+    for line in log_delta.splitlines():
+        marker_index = line.find(TELEGRAM_LOG_PREFIX)
+        if marker_index < 0:
+            continue
+        raw = line[marker_index + len(TELEGRAM_LOG_PREFIX) :].strip()
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            deliveries.append(payload)
+    return deliveries
+
+
 def audit_telegram(
     log_delta: str,
     args: Sequence[str],
@@ -303,26 +321,50 @@ def audit_telegram(
     explicit_failures = [
         line for line in lines if any(marker in line for marker in TELEGRAM_FAILURE_MARKERS)
     ]
-    signal_attempt_count = sum(1 for line in lines if "Telegram alert for " in line)
-    signal_failure_count = sum(
-        1 for line in lines if re.search(r"Telegram alert for .+: FAILED\s*$", line)
-    )
-    signal_success_count = sum(
-        1 for line in lines if re.search(r"Telegram alert for .+: sent\s*$", line)
-    )
-    heartbeat_claimed = any("Daily heartbeat sent." in line for line in lines)
-    admin_warning_claimed = any("Admin Telegram warning sent." in line for line in lines)
+    structured = parse_structured_telegram_deliveries(log_delta)
+    required_failures = [
+        item
+        for item in structured
+        if item.get("required") is True and item.get("delivered") is not True
+    ]
+
+    if structured:
+        signal_records = [item for item in structured if item.get("kind") == "signal"]
+        signal_attempt_count = sum(item.get("attempted") is True for item in signal_records)
+        signal_failure_count = sum(item.get("delivered") is not True for item in signal_records)
+        signal_success_count = sum(item.get("delivered") is True for item in signal_records)
+        heartbeat_claimed = any(
+            item.get("kind") == "heartbeat" and item.get("delivered") is True
+            for item in structured
+        )
+        admin_warning_claimed = any(
+            item.get("kind") == "admin_warning" and item.get("delivered") is True
+            for item in structured
+        )
+    else:
+        signal_attempt_count = sum(1 for line in lines if "Telegram alert for " in line)
+        signal_failure_count = sum(
+            1 for line in lines if re.search(r"Telegram alert for .+: FAILED\s*$", line)
+        )
+        signal_success_count = sum(
+            1 for line in lines if re.search(r"Telegram alert for .+: sent\s*$", line)
+        )
+        heartbeat_claimed = any("Daily heartbeat sent." in line for line in lines)
+        admin_warning_claimed = any("Admin Telegram warning sent." in line for line in lines)
 
     live_telegram_allowed = not dry_run and not no_telegram and not run_skipped
     delivery_required = live_telegram_allowed and (
-        heartbeat_requested or scanner_collapsed or signal_attempt_count > 0
+        heartbeat_requested
+        or scanner_collapsed
+        or signal_attempt_count > 0
+        or any(item.get("required") is True for item in structured)
     )
     heartbeat_required = delivery_required and heartbeat_requested and not scanner_collapsed
 
     delivery_verified = True
     if delivery_required and not credentials_present:
         delivery_verified = False
-    if explicit_failures or signal_failure_count:
+    if explicit_failures or signal_failure_count or required_failures:
         delivery_verified = False
     if heartbeat_required and not heartbeat_claimed:
         delivery_verified = False
@@ -339,7 +381,8 @@ def audit_telegram(
         signal_attempt_count=signal_attempt_count,
         signal_success_count=signal_success_count,
         signal_failure_count=signal_failure_count,
-        failure_line_count=len(explicit_failures),
+        required_failure_count=len(required_failures),
+        failure_line_count=len(explicit_failures) + len(required_failures),
         delivery_verified=delivery_verified,
     )
 
@@ -354,6 +397,10 @@ def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 def _status_exit_code(failure_reasons: Sequence[str]) -> int:
     if not failure_reasons:
         return 0
+    if "scanner_exit_code=23" in failure_reasons or any(
+        "telegram" in reason for reason in failure_reasons
+    ):
+        return 23
     if any(reason.startswith("scanner_exit_code=") for reason in failure_reasons):
         return 20
     if any("health" in reason or "report" in reason for reason in failure_reasons):
