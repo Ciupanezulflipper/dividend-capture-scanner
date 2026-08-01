@@ -80,9 +80,11 @@ class HistoryStoreTests(unittest.TestCase):
             self.assertFalse(path.exists())
             self.assertFalse(backup_path(path).exists())
 
+            marker_before = marker.read_text(encoding="utf-8")
             with self.assertRaises(HistoryRecoveryRequired):
                 load_history(path)
             self.assertTrue(marker.exists())
+            self.assertEqual(marker.read_text(encoding="utf-8"), marker_before)
 
     def test_restored_valid_primary_clears_recovery_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
