@@ -41,7 +41,7 @@ jobs:
           python-version: "3.12"
 
       - name: Validate repository diff
-        run: git diff --check HEAD^ HEAD || true
+        run: git diff --check HEAD^ HEAD
 
       - name: Validate shell syntax
         run: bash -n run_bot.sh
