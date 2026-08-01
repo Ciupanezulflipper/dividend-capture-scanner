@@ -23,19 +23,26 @@ Unknown Android permission state is reported as `WARN`; it is never silently rep
 
 Before sending, the tool requires both history snapshots to be valid and identical. It hashes both files before and after the send and fails the canary if either byte sequence changes.
 
+The canary reads `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` only from its process environment. It does not parse or copy `.env` into the evidence file. The production invocation below loads `.env` inside a subshell, so those variables disappear when the command finishes.
+
 The canary validates Telegram's JSON `ok: true` response through the production delivery contract. Credentials and message contents are not written to the JSON evidence file, and token-like values found in cron output are redacted.
 
 ## Production invocation
 
 ```bash
-python3 -m tools.termux_operational_gate \
-  --expected-head <DEPLOYED_MAIN_SHA> \
-  --expected-timezone America/New_York \
-  --expected-cron '0 10 * * 1-5' \
-  --require-cron-arg=--daily-heartbeat \
-  --require-cron-arg=--report \
-  --acquire-wake-lock \
-  --telegram-canary
+(
+  set -a
+  . ./.env
+  set +a
+  python3 -m tools.termux_operational_gate \
+    --expected-head <DEPLOYED_MAIN_SHA> \
+    --expected-timezone America/New_York \
+    --expected-cron '0 10 * * 1-5' \
+    --require-cron-arg=--daily-heartbeat \
+    --require-cron-arg=--report \
+    --acquire-wake-lock \
+    --telegram-canary
+)
 ```
 
 The default evidence path is `reports/operational_gate_latest.json`.
