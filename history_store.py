@@ -157,18 +157,20 @@ def _fail_closed(
     evidence: list[Path],
     logger: logging.Logger | None,
 ) -> None:
-    marker = _write_recovery_marker(path, reason, evidence)
+    marker = recovery_marker_path(path)
+    if not marker.exists() or evidence:
+        marker = _write_recovery_marker(path, reason, evidence)
+    evidence_text = ", ".join(str(item) for item in evidence) or "preserved in marker"
     _log(
         logger,
         logging.CRITICAL,
         "History recovery required | marker=%s reason=%s evidence=%s",
         marker,
         reason,
-        ", ".join(str(item) for item in evidence) or "none",
+        evidence_text,
     )
     raise HistoryRecoveryRequired(
-        f"{reason}; marker={marker}; evidence="
-        + (", ".join(str(item) for item in evidence) or "none")
+        f"{reason}; marker={marker}; evidence={evidence_text}"
     )
 
 
