@@ -24,7 +24,7 @@ from tools.termux_gate_runtime import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_TZ = "America/New_York"
+DEFAULT_CRON_TZ = "UTC"
 DEFAULT_CRON = "0 10 * * 1-5"
 
 
@@ -78,11 +78,43 @@ def overall(checks: Sequence[dict[str, Any]]) -> str:
     return "PASS_WITH_WARNINGS" if any(item["status"] in {"WARN", "FAIL"} for item in checks) else "PASS"
 
 
+def canary_status(requested: bool, delivery: TelegramDeliveryResult | None) -> str:
+    if not requested:
+        return "SKIPPED"
+    if delivery is None:
+        return "BLOCKED"
+    return "DELIVERED" if delivery.delivered else "FAILED"
+
+
+def result_code(
+    checks: Sequence[dict[str, Any]],
+    requested: bool,
+    delivery: TelegramDeliveryResult | None,
+) -> int:
+    non_canary_critical_failure = any(
+        item["critical"]
+        and item["status"] == "FAIL"
+        and item["name"] != "telegram_canary"
+        for item in checks
+    )
+    if non_canary_critical_failure:
+        return 30
+    if requested and (delivery is None or not delivery.delivered):
+        return 23
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--repo", type=Path, default=ROOT)
     result.add_argument("--expected-head", default="")
-    result.add_argument("--expected-timezone", default=DEFAULT_TZ)
+    result.add_argument(
+        "--expected-cron-timezone",
+        "--expected-timezone",
+        dest="expected_cron_timezone",
+        default=DEFAULT_CRON_TZ,
+        help="Expected CRON_TZ/TZ value (default: UTC).",
+    )
     result.add_argument("--expected-cron", default=DEFAULT_CRON)
     result.add_argument("--require-cron-arg", action="append", default=[])
     result.add_argument("--acquire-wake-lock", action="store_true")
@@ -103,7 +135,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     history_check, _ = history_pair(repo)
     checks.append(history_check)
     cron_check, variables = cron_audit(repo, args.expected_cron, args.require_cron_arg)
-    checks.extend([cron_check, crond_audit(), timezone_audit(args.expected_timezone, variables)])
+    checks.extend(
+        [
+            cron_check,
+            crond_audit(),
+            timezone_audit(args.expected_cron_timezone, variables),
+        ]
+    )
     checks.extend(boot_audit(Path.home()))
     checks.extend([wake_audit(args.acquire_wake_lock), battery_audit(), latest_health(repo)])
 
@@ -119,12 +157,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     atomic_json(
         output,
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "repo": str(repo),
             "status": status,
             "expected_head": args.expected_head,
-            "expected_timezone": args.expected_timezone,
+            "expected_cron_timezone": args.expected_cron_timezone,
             "expected_cron": args.expected_cron,
             "required_cron_args": args.require_cron_arg,
             "checks": checks,
@@ -137,14 +175,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"critical={str(item['critical']).lower()} detail={item['detail']}"
         )
     print(f"OPERATIONAL_GATE_STATUS={status}")
-    print(
-        "TELEGRAM_CANARY_STATUS="
-        + ("DELIVERED" if delivery and delivery.delivered else "FAILED" if args.telegram_canary else "SKIPPED")
-    )
+    print(f"TELEGRAM_CANARY_STATUS={canary_status(args.telegram_canary, delivery)}")
     print(f"EVIDENCE_FILE={output}")
-    if args.telegram_canary and (not delivery or not delivery.delivered):
-        return 23
-    return 30 if status == "FAIL" else 0
+    return result_code(checks, args.telegram_canary, delivery)
 
 
 if __name__ == "__main__":

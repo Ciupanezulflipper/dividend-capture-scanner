@@ -67,42 +67,53 @@ def atomic_json(path: Path, payload: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def valid_history(path: Path) -> tuple[bool, int, str]:
+def load_valid_history(path: Path) -> tuple[bool, int, str, dict[str, Any] | None]:
     if not path.is_file():
-        return False, 0, "missing"
+        return False, 0, "missing", None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return False, 0, f"invalid_json:{type(exc).__name__}"
+        return False, 0, f"invalid_json:{type(exc).__name__}", None
     if not isinstance(payload, dict):
-        return False, 0, "root_not_object"
+        return False, 0, "root_not_object", None
     if any(not isinstance(value, dict) for value in payload.values()):
-        return False, len(payload), "non_object_entry"
-    return True, len(payload), "valid"
+        return False, len(payload), "non_object_entry", None
+    return True, len(payload), "valid", payload
+
+
+def valid_history(path: Path) -> tuple[bool, int, str]:
+    valid, count, detail, _ = load_valid_history(path)
+    return valid, count, detail
 
 
 def history_pair(repo: Path) -> tuple[dict[str, Any], dict[str, str]]:
     primary, backup = repo / "history.json", repo / "history.json.last-good"
-    p_ok, p_count, p_detail = valid_history(primary)
-    b_ok, b_count, b_detail = valid_history(backup)
+    p_ok, p_count, p_detail, p_payload = load_valid_history(primary)
+    b_ok, b_count, b_detail, b_payload = load_valid_history(backup)
     hashes = {
         key: digest(path)
         for key, path in (("primary", primary), ("backup", backup))
         if path.is_file()
     }
-    equal = bool(hashes.get("primary")) and hashes.get("primary") == hashes.get("backup")
-    passed = p_ok and b_ok and equal
+    byte_equal = bool(hashes.get("primary")) and hashes.get("primary") == hashes.get("backup")
+    semantic_equal = p_ok and b_ok and p_payload == b_payload
+    passed = bool(semantic_equal)
     return (
         check(
             "history_pair",
             "PASS" if passed else "FAIL",
             True,
-            f"primary={p_detail}:{p_count} backup={b_detail}:{b_count} equal={str(equal).lower()}",
+            (
+                f"primary={p_detail}:{p_count} backup={b_detail}:{b_count} "
+                f"semantic_equal={str(semantic_equal).lower()} "
+                f"byte_equal={str(byte_equal).lower()}"
+            ),
             primary=str(primary),
             backup=str(backup),
             primary_entries=p_count,
             backup_entries=b_count,
-            hashes_equal=equal,
+            semantic_equal=semantic_equal,
+            byte_equal=byte_equal,
         ),
         hashes,
     )
