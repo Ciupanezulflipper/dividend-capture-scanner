@@ -1,0 +1,72 @@
+name: PR22 exact-head validation
+
+on:
+  pull_request:
+    branches:
+      - ci/pr22-validation-base
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact head identity
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate repository diff
+        run: git diff --check ${{ github.event.pull_request.base.sha }}..HEAD
+
+      - name: Validate shell syntax
+        run: bash -n run_bot.sh
+
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile \
+            dividend_scanner.py \
+            quality_scanner.py \
+            signal_quality_audit.py \
+            history_store.py \
+            telegram_delivery.py \
+            tools/history_recovery.py \
+            tools/network_preflight.py \
+            tools/run_production_scan.py \
+            tools/run_quality_production_scan.py \
+            tools/runtime_monitor.py \
+            tools/termux_gate_core.py \
+            tools/termux_gate_runtime.py \
+            tools/termux_operational_gate.py \
+            tests/test_history_recovery.py \
+            tests/test_history_store.py \
+            tests/test_network_guard_integration.py \
+            tests/test_network_preflight.py \
+            tests/test_production_runner.py \
+            tests/test_quality_scanner_integration.py \
+            tests/test_runtime_monitor.py \
+            tests/test_scanner_history_integration.py \
+            tests/test_scanner_telegram_integration.py \
+            tests/test_signal_quality_audit.py \
+            tests/test_telegram_delivery.py \
+            tests/test_termux_operational_gate.py
+
+      - name: Run full offline reliability suite
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Guard against automatic dependency upgrades
+        run: |
+          if grep -n -- '--upgrade pip setuptools wheel' run_bot.sh; then
+            echo 'Routine launcher must not upgrade packaging tools.' >&2
+            exit 1
+          fi
