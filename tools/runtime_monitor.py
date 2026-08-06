@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Publish compact DQP runtime status to a private, unguessable ntfy topic.
+"""Publish compact DQP runtime status to an unguessable public ntfy topic.
 
-The publisher is optional and non-blocking.  It exposes no credentials, market
-positions, or Telegram content.  A remote monitor can distinguish a successful
-run, a failed run, and a completely missing run by polling the topic.
+The publisher is optional and non-blocking. It exposes no credentials, market
+positions, or Telegram content. Because ntfy topics are public, production must
+use a long random topic known only to the scanner and its remote monitor. A
+remote monitor can distinguish a successful run, a failed run, and a completely
+missing run by polling that topic.
 """
 
 from __future__ import annotations
