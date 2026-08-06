@@ -3,6 +3,7 @@
 # run_bot.sh — Dividend Quality Pullback Scanner launcher
 # =============================================================================
 # Routine scheduled runs are deliberately network-free until the scanner starts.
+# Live production connectivity is guarded inside the production wrapper.
 # Dependency installation is explicit:
 #
 #   ./run_bot.sh --install-deps
