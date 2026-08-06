@@ -119,6 +119,8 @@ pass "Required Python imports available."
   "signal_quality_audit.py" \
   "$BASE_RUNNER_SCRIPT" \
   "$RUNNER_SCRIPT" \
+  "tools/network_preflight.py" \
+  "tools/runtime_monitor.py" \
   || die "Python syntax validation failed"
 pass "Python syntax OK."
 
