@@ -10,6 +10,7 @@ history*.last-good
 history*.recovery-required
 *.corrupt.*
 scan_health_*.json
+.runtime/
 
 # Logs
 *.log

@@ -3,6 +3,7 @@
 # run_bot.sh — Dividend Quality Pullback Scanner launcher
 # =============================================================================
 # Routine scheduled runs are deliberately network-free until the scanner starts.
+# Live production connectivity is guarded inside the production wrapper.
 # Dependency installation is explicit:
 #
 #   ./run_bot.sh --install-deps
@@ -119,6 +120,8 @@ pass "Required Python imports available."
   "signal_quality_audit.py" \
   "$BASE_RUNNER_SCRIPT" \
   "$RUNNER_SCRIPT" \
+  "tools/network_preflight.py" \
+  "tools/runtime_monitor.py" \
   || die "Python syntax validation failed"
 pass "Python syntax OK."
 
