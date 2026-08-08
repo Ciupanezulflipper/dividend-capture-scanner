@@ -12,6 +12,11 @@ Dividend Quality Pullback Scanner
 - Remote: git@github.com:Ciupanezulflipper/dividend-capture-scanner.git
 - Local (Termux): /data/data/com.termux/files/home/dividend-capture-scanner
 
+## Shared Android/Termux Engineering Baseline — 2026-08-08
+- Read `ANDROID_TERMUX_TOOLCHAIN.md` before proposing or installing additional phone tooling.
+- It records the verified shared Android/Termux toolchain used across this scanner, BotA, and LifVio.
+- Global tool availability does not mean hooks, formatters, scanners, or Spec Kit configuration are enabled in this repository.
+
 ## Known Commits (verify with git log before assuming state)
 | Hash | Description |
 |---|---|
