@@ -21,6 +21,8 @@ cd "$SCRIPT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
 REQ_FILE="requirements.txt"
+TERMUX_REQ_FILE="requirements-termux.txt"
+TERMUX_EXTRA_INDEX_URL="${TERMUX_EXTRA_INDEX_URL:-https://termux-user-repository.github.io/pypi/}"
 BASE_MAIN_SCRIPT="dividend_scanner.py"
 MAIN_SCRIPT="quality_scanner.py"
 BASE_RUNNER_SCRIPT="tools/run_production_scan.py"
@@ -42,16 +44,33 @@ die()  { printf '[run_bot] ERROR: %s\n' "$*" >&2; exit 1; }
 pass() { printf '[run_bot] PASS: %s\n' "$*"; }
 
 requirements_hash() {
-  "$PYTHON_BIN" -c 'import hashlib, pathlib; print(hashlib.sha256(pathlib.Path("requirements.txt").read_bytes()).hexdigest())'
+  if [ "${TERMUX_MODE:-0}" = "1" ]; then
+    "$PYTHON_BIN" -c 'import hashlib, pathlib; h=hashlib.sha256(); [h.update(pathlib.Path(p).read_bytes()) for p in ("requirements.txt", "requirements-termux.txt")]; print(h.hexdigest())'
+  else
+    "$PYTHON_BIN" -c 'import hashlib, pathlib; print(hashlib.sha256(pathlib.Path("requirements.txt").read_bytes()).hexdigest())'
+  fi
 }
 
 install_dependencies() {
   command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "python3 not found"
 
   if [ "${TERMUX_MODE:-0}" = "1" ]; then
-    log "Installing Termux core dependencies from $REQ_FILE ..."
-    "$PYTHON_BIN" -m pip install --break-system-packages -r "$REQ_FILE" \
+    [ -f "$TERMUX_REQ_FILE" ] || die "$TERMUX_REQ_FILE not found"
+    log "Installing Termux core dependencies from $TERMUX_REQ_FILE ..."
+    "$PYTHON_BIN" -m pip install \
+      --break-system-packages \
+      --extra-index-url "$TERMUX_EXTRA_INDEX_URL" \
+      -r "$TERMUX_REQ_FILE" \
       || die "Core dependency installation failed"
+
+    # The Android curl_cffi abi3 wheel observed after the Python 3.14 Termux
+    # upgrade linked against libpython3.13.so. yfinance 1.4.1 has a requests
+    # fallback when curl_cffi is absent, so remove it deliberately on Termux.
+    "$PYTHON_BIN" -m pip uninstall --break-system-packages -y curl_cffi >/dev/null 2>&1 \
+      || die "Failed to remove incompatible Termux curl_cffi"
+    "$PYTHON_BIN" -c 'import yfinance as yf; assert yf.__version__ == "1.4.1"' \
+      || die "Validated Termux yfinance fallback is unavailable"
+
     printf '%s' "$(requirements_hash)" > "$TERMUX_STAMP"
   else
     if [ ! -d "$VENV_DIR" ]; then
@@ -83,6 +102,9 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "python3 not found"
 [ -f "$BASE_RUNNER_SCRIPT" ] || die "$BASE_RUNNER_SCRIPT not found in $SCRIPT_DIR"
 [ -f "$RUNNER_SCRIPT" ] || die "$RUNNER_SCRIPT not found in $SCRIPT_DIR"
 [ -f "$REQ_FILE" ] || die "$REQ_FILE not found in $SCRIPT_DIR"
+if [ "${TERMUX_MODE:-0}" = "1" ]; then
+  [ -f "$TERMUX_REQ_FILE" ] || die "$TERMUX_REQ_FILE not found in $SCRIPT_DIR"
+fi
 
 if [ "${TERMUX_MODE:-0}" = "1" ]; then
   MODE_LABEL="Termux (system Python)"

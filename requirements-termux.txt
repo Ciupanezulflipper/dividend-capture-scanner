@@ -1,0 +1,9 @@
+# Termux/Android overlay for requirements.txt.
+#
+# Python 3.14 on Android requires wheels built for Android rather than generic
+# Linux wheels/source builds. These exact native versions were validated on the
+# production arm64 Termux runtime on 2026-08-13.
+-r requirements.txt
+
+numpy==2.5.0
+pandas==2.3.1

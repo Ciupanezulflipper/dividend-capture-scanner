@@ -16,6 +16,19 @@ class QualityScannerIntegrationTests(unittest.TestCase):
         self.assertIn('MAIN_SCRIPT="quality_scanner.py"', text)
         self.assertIn('RUNNER_SCRIPT="tools/run_quality_production_scan.py"', text)
 
+    def test_termux_dependency_policy_preserves_python314_fallback(self):
+        launcher = (ROOT / "run_bot.sh").read_text(encoding="utf-8")
+        core = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        termux = (ROOT / "requirements-termux.txt").read_text(encoding="utf-8")
+
+        self.assertIn("yfinance==1.4.1", core)
+        self.assertNotIn("yfinance>=0.2.66,<0.3", core)
+        self.assertIn("numpy==2.5.0", termux)
+        self.assertIn("pandas==2.3.1", termux)
+        self.assertIn("termux-user-repository.github.io/pypi/", launcher)
+        self.assertIn("pip uninstall --break-system-packages -y curl_cffi", launcher)
+        self.assertIn('assert yf.__version__ == "1.4.1"', launcher)
+
     def test_quality_wrapper_reuses_production_runner(self):
         text = (ROOT / "tools" / "run_quality_production_scan.py").read_text(
             encoding="utf-8"
