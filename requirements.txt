@@ -3,8 +3,13 @@
 # Optional packages NOT listed here:
 # - lxml: faster pandas.read_html parser, but fragile on Termux
 # - pandas-ta: preferred RSI engine, but scanner has pure-pandas fallback
+#
+# yfinance 1.4.1 is the validated Python 3.14 fallback release. On Termux the
+# launcher deliberately removes curl_cffi after installation because the
+# Android abi3 wheel observed on Python 3.14 linked against libpython3.13.so.
+# Without curl_cffi, yfinance 1.4.1 falls back to requests.
 
-yfinance>=0.2.66,<0.3
+yfinance==1.4.1
 pandas>=2.1,<3
 python-dotenv>=1.0,<2
 requests>=2.31,<3
