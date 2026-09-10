@@ -53,6 +53,12 @@ class TelegramDeliveryTests(unittest.TestCase):
         self.assertNotIn("message", self.stream.getvalue())
 
     def test_http_200_with_ok_false_is_failure(self) -> None:
+        calls = []
+
+        def reject(*args, **kwargs):
+            calls.append(1)
+            return FakeResponse(200, {"ok": False, "description": "chat not found"})
+
         result = send_telegram(
             "secret-token",
             "123",
@@ -60,13 +66,13 @@ class TelegramDeliveryTests(unittest.TestCase):
             self.logger,
             kind="signal",
             subject="PNW",
-            post=lambda *args, **kwargs: FakeResponse(
-                200, {"ok": False, "description": "chat not found"}
-            ),
+            post=reject,
+            sleep=lambda _: None,
         )
         self.assertFalse(result.delivered)
         self.assertEqual(result.outcome, "api_rejected")
         self.assertEqual(result.status_code, 200)
+        self.assertEqual(len(calls), 1)
         self.assertIn("ERROR", self.stream.getvalue())
 
     def test_missing_credentials_is_not_attempted(self) -> None:
@@ -102,6 +108,82 @@ class TelegramDeliveryTests(unittest.TestCase):
         self.assertEqual(result.outcome, "transport_error")
         self.assertNotIn(token, self.stream.getvalue())
         self.assertIn("[REDACTED]", self.stream.getvalue())
+
+    def test_required_signal_retries_transport_error_and_recovers(self) -> None:
+        outcomes = [
+            ConnectionResetError(104, "Connection reset by peer"),
+            FakeResponse(200, {"ok": True}),
+        ]
+        calls = []
+        sleeps = []
+
+        def flaky_post(*args, **kwargs):
+            calls.append(1)
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        result = send_telegram(
+            "token",
+            "123",
+            "message",
+            self.logger,
+            kind="signal",
+            subject="ITW",
+            required=True,
+            post=flaky_post,
+            sleep=sleeps.append,
+        )
+        self.assertTrue(result.delivered)
+        self.assertEqual(result.outcome, "delivered")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sleeps, [2.0])
+        self.assertIn("TELEGRAM_RETRY kind=signal subject=ITW retry=1", self.stream.getvalue())
+
+    def test_required_signal_stops_after_two_transport_retries(self) -> None:
+        calls = []
+        sleeps = []
+
+        def always_fail(*args, **kwargs):
+            calls.append(1)
+            raise ConnectionError("temporary network failure")
+
+        result = send_telegram(
+            "token",
+            "123",
+            "message",
+            self.logger,
+            kind="signal",
+            subject="ITW",
+            required=True,
+            post=always_fail,
+            sleep=sleeps.append,
+        )
+        self.assertFalse(result.delivered)
+        self.assertEqual(result.outcome, "transport_error")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleeps, [2.0, 5.0])
+
+    def test_non_signal_transport_error_is_not_retried(self) -> None:
+        calls = []
+
+        def fail(*args, **kwargs):
+            calls.append(1)
+            raise ConnectionError("temporary network failure")
+
+        result = send_telegram(
+            "token",
+            "123",
+            "message",
+            self.logger,
+            kind="heartbeat",
+            required=True,
+            post=fail,
+            sleep=lambda _: None,
+        )
+        self.assertFalse(result.delivered)
+        self.assertEqual(len(calls), 1)
 
     def test_invalid_json_response_is_not_success(self) -> None:
         result = send_telegram(
