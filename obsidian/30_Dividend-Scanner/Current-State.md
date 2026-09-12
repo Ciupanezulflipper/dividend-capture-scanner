@@ -1,6 +1,6 @@
 # Dividend Scanner — Current State
 
-Last reviewed: 2026-09-10
+Last reviewed: 2026-09-12
 
 > Navigation/knowledge mirror. GitHub and verified runtime/data evidence are authoritative.
 
@@ -16,7 +16,7 @@ Primary continuity entrypoint: `AI_START_HERE.md`
 - **OPERATIONS: MONITOR**
 - **STRATEGY EVALUATION: READY**
 
-Telegram transient signal-delivery retry fix is implemented on GitHub and deployed to Termux. Runtime regression test result: **8/8 PASS**.
+Telegram transient signal-delivery retry fix is deployed to Termux. Runtime regression result: **8/8 PASS**.
 
 Implementation commits:
 - `cfb2a2b77062c2da421e0ee53448539545a4678c`
@@ -24,52 +24,77 @@ Implementation commits:
 
 ## Sep 10 ITW incident
 
-ITW was the one clean signal on the Sep 10 scan. Telegram delivery was attempted and failed with a transient connection reset. The heartbeat succeeded roughly five seconds later. ITW was correctly not written to `history.json` because delivery was not verified.
+ITW qualified as a clean signal but Telegram delivery failed on a transient connection reset. ITW was correctly not written to history.
 
 Classification: `QUALIFIED_BUT_DELIVERY_FAILED`.
 
-Correction: required signal messages now receive up to two bounded retries on `transport_error` only. API rejections are not retried. Heartbeat semantics and history-after-success invariant remain unchanged.
+Correction: required signal messages retry bounded transient `transport_error` failures. API rejections are not retried.
 
-See GitHub incident record:
-`docs/INCIDENT_2026-09-10_ITW_TELEGRAM_TRANSPORT.md`
+## Sep 11 live validation
 
-## Frozen delivered-signal baseline
+Four clean signals were successfully delivered:
 
-20 signals are currently in runtime `history.json`:
+- ESS
+- FRT
+- OMC
+- WTW
 
-TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED.
+All four had verified HTTP 200 Telegram delivery and were appended to `history.json`.
 
-PSA is the newest delivered forward-validation case. ITW is not part of delivered history.
+History reconciliation:
+- previous count: 20
+- current count: 24
+- delivered-but-not-history: none
+- invalid history writes: none
+- primary and last-good history snapshots: semantically equal
+- ITW remains excluded
 
-Historical data-quality note: EA, JNJ and ED have stored dividend yield `0.0`; preserve those snapshots and flag them during analysis rather than rewriting history.
+New forward cases:
+
+| Symbol | Price | Ex-date | Yield % | RSI | MA200 |
+|---|---:|---|---:|---:|---:|
+| ESS | 274.37 | 2026-09-30 | 3.776 | 36.07 | 263.999 |
+| FRT | 115.16 | 2026-10-01 | 4.029 | 34.30 | 109.986 |
+| OMC | 78.30 | 2026-09-18 | 4.087 | 35.88 | 77.189 |
+| WTW | 313.72 | 2026-09-30 | 1.224 | 37.96 | 298.864 |
+
+The same run's heartbeat timed out after the four signal deliveries succeeded, so run health correctly reported failure/exit 23. This did not lose any signal.
+
+## Current delivered baseline
+
+24 tracked signals:
+
+TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW.
+
+EA, JNJ and ED retain stored dividend yield 0.0; preserve those snapshots and flag them during analysis.
 
 ## Evaluation contract
 
-For each delivered signal track:
+For every delivered signal track:
 
-- signal/alert price;
-- maximum drawdown;
-- first +3% date and trading days;
-- first +5% date and trading days;
-- T+1, T+3, T+5, T+10, T+20 returns;
-- dividend-adjusted total return where applicable;
-- SPY return over identical dates.
+- frozen alert price
+- maximum drawdown
+- first +3% date and trading days
+- first +5% date and trading days
+- T+1/T+3/T+5/T+10/T+20 returns
+- dividend-adjusted total return
+- SPY return over identical dates
 
 If +3%/+5% is not reached within 20 trading days, record `NOT_REACHED_T20`.
 
-Aggregate metrics: +3% and +5% hit rates, median time to target, median/worst drawdown, T+20 win rate, median T+20 total return, and outperformance versus SPY.
+## Prospective cases
 
-19 signals are mature enough for T+20 analysis. PSA remains prospective.
+- PSA
+- ESS
+- FRT
+- OMC
+- WTW
+
+Separate:
+- ITW — `QUALIFIED_BUT_DELIVERY_FAILED`
 
 ## Operating rule
 
-For the next 3–5 trading days, do not change thresholds, strategy logic, schema, ledger, or infrastructure unless new evidence proves a defect.
+Do not change thresholds, strategy logic, schema, ledger, or infrastructure unless new evidence proves a defect.
 
-Verify only:
-1. weekday 10:00 New York run executes;
-2. clean signals, when present, are delivered before/with the heartbeat;
-3. successful deliveries enter `history.json`; failed deliveries do not.
-
-## Next step
-
-Begin the 19-case mature-signal performance study while production runs unchanged.
+Next high-value task: mature-signal performance study while production continues unchanged.
