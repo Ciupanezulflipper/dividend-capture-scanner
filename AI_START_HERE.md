@@ -1,6 +1,6 @@
 # DQP — AI START HERE
 
-Last verified: 2026-09-10
+Last verified: 2026-09-12
 
 ## Purpose
 
@@ -23,7 +23,7 @@ GitHub plus verified runtime/data evidence are authoritative. Obsidian is a know
 - Telegram delivery regression suite passed in Termux: **8/8 tests PASS**.
 - Required clean-signal Telegram messages retry only on transient `transport_error` failures, with two bounded retries after short delays.
 - Telegram API rejections are not retried.
-- Heartbeat behavior is unchanged.
+- Heartbeat behavior remains independent from signal delivery.
 - Signal history is committed only after verified successful Telegram delivery.
 
 ## Sep 10 incident — ITW
@@ -34,7 +34,7 @@ On the 2026-09-10 scheduled scan:
 - ITW qualified as the one clean signal.
 - ITW signal snapshot: price ~268.69, MA200 ~264.88, RSI14 ~34.3, dividend yield ~2.56%, ex-date 2026-09-30, HIGH priority.
 - Telegram signal delivery was attempted once by the old code and failed with `ConnectionResetError(104, 'Connection reset by peer')`.
-- About five seconds later the daily heartbeat was delivered successfully with HTTP 200.
+- About five seconds later the daily heartbeat delivered successfully with HTTP 200.
 - `history.json` was intentionally not modified because the ITW alert was not delivered.
 - Run health correctly recorded `scanner_exit_code=23`, `telegram_delivery_not_verified`, signal attempt=1, signal failure=1, signal success=0.
 
@@ -42,42 +42,66 @@ Classification: **QUALIFIED_BUT_DELIVERY_FAILED**. This was a transient delivery
 
 Correction: bounded retry for required clean-signal transport failures only. No strategy thresholds were changed.
 
+## Sep 11 live validation — four delivered signals
+
+The next production run provided the first strong live validation after the retry fix.
+
+Runtime reconciliation proved:
+
+- CSV `signal_passed=true` rows: 9.
+- Clean-only Telegram gate delivered exactly 4 signals: **ESS, FRT, OMC, WTW**.
+- Five additional passed rows were correctly skipped as non-clean by `telegram_clean_only_non_clean_signal`: FDX, GRMN, DOC, PKG, TROW.
+- All four clean signals had `attempted=true`, `delivered=true`, `outcome=delivered`, HTTP 200.
+- `history.json` and `history.json.last-good` are semantically equal.
+- No delivered Sep 11 signal is missing from history.
+- No failed signal was incorrectly written to history.
+- History count advanced exactly **20 -> 24**.
+- ITW remains excluded, correctly.
+
+New delivered signal snapshots:
+
+| Symbol | Alerted at UTC | Price | Ex-date | Yield % | RSI | MA200 |
+|---|---|---:|---|---:|---:|---:|
+| ESS | 2026-09-10T14:40:46.599791+00:00 | 274.37 | 2026-09-30 | 3.776 | 36.07 | 263.999 |
+| FRT | 2026-09-10T14:40:48.533577+00:00 | 115.16 | 2026-10-01 | 4.029 | 34.30 | 109.986 |
+| OMC | 2026-09-10T14:40:49.966731+00:00 | 78.30 | 2026-09-18 | 4.087 | 35.88 | 77.189 |
+| WTW | 2026-09-10T14:40:51.298522+00:00 | 313.72 | 2026-09-30 | 1.224 | 37.96 | 298.864 |
+
+Important date note: the runtime `alerted_at` timestamps are UTC and fall on 2026-09-10 UTC, while the Telegram heartbeat/user-facing market date was Sep 11 in the scanner's market-date framing. Preserve runtime timestamps exactly; do not rewrite them to match display labels.
+
+## Heartbeat result on Sep 11
+
+The four required clean-signal deliveries all succeeded.
+
+The heartbeat itself failed after transport timeout:
+
+- attempted=true
+- delivered=false
+- outcome=`transport_error`
+- detail: Telegram read timeout (15 seconds)
+- `TELEGRAM_REQUIRED_DELIVERY_FAILED count=1 items=heartbeat`
+
+Therefore `run_health.success=false` and `scanner_exit_code=23` were truthful for the run even though all four clean signals were successfully delivered.
+
+This is an observability/reliability note, not a signal-loss incident. Do not change signal logic because of it.
+
 ## Frozen delivered-signal baseline
 
-`history.json` contains **20 delivered/tracked signals**. The stored schema is:
+`history.json` now contains **24 delivered/tracked signals**.
+
+Stored schema:
 
 `alerted_at, days_away, dividend_yield_pct, ex_date, ma, price, rsi, symbol`
 
-Baseline:
+Baseline symbols:
 
-| # | Symbol | Alerted at UTC | Price | Ex-date | Yield % | RSI |
-|---:|---|---|---:|---|---:|---:|
-| 1 | TGT | 2026-05-12T03:58:23.507829+00:00 | 118.44 | 2026-05-13 | 3.85 | 37.3 |
-| 2 | TRV | 2026-06-01T14:39:06.266820+00:00 | 289.46 | 2026-06-10 | 1.73 | 33.8 |
-| 3 | WMB | 2026-06-01T14:39:07.689692+00:00 | 70.37 | 2026-06-12 | 2.98 | 35.8 |
-| 4 | AEE | 2026-06-01T14:39:03.749511+00:00 | 105.57 | 2026-06-09 | 2.84 | 36.3 |
-| 5 | PCAR | 2026-05-12T03:55:32.438092+00:00 | 112.96 | 2026-05-13 | 1.24 | 36.2 |
-| 6 | EA | 2026-05-07T14:07:55.233488+00:00 | 200.79 | 2026-05-27 | 0.00 | 35.1 |
-| 7 | CB | 2026-05-29T14:31:06.884894+00:00 | 313.06 | 2026-06-12 | 1.30 | 35.7 |
-| 8 | JNJ | 2026-05-07T14:10:46.192673+00:00 | 224.62 | 2026-05-26 | 0.00 | 37.1 |
-| 9 | NEE | 2026-05-26T14:26:57.275141+00:00 | 87.93 | 2026-06-05 | 2.83 | 37.7 |
-| 10 | PSA | 2026-09-07T14:30:41.696248+00:00 | 302.01 | 2026-09-15 | 3.97 | 33.9 |
-| 11 | DVN | 2026-05-29T14:31:08.191013+00:00 | 43.78 | 2026-06-15 | 2.38 | 34.9 |
-| 12 | BALL | 2026-05-12T03:45:15.579423+00:00 | 57.72 | 2026-06-01 | 1.39 | 38.0 |
-| 13 | APA | 2026-07-01T14:18:32.442017+00:00 | 32.34 | 2026-07-22 | 3.09 | 33.9 |
-| 14 | TPL | 2026-05-12T03:58:38.931235+00:00 | 402.63 | 2026-06-01 | 0.60 | 36.1 |
-| 15 | EOG | 2026-07-01T14:18:32.636782+00:00 | 128.35 | 2026-07-17 | 3.18 | 37.7 |
-| 16 | REG | 2026-06-02T14:23:14.621718+00:00 | 76.03 | 2026-06-12 | 3.97 | 37.5 |
-| 17 | TJX | 2026-05-12T03:58:46.212488+00:00 | 148.91 | 2026-05-14 | 1.29 | 29.6 |
-| 18 | FCX | 2026-07-07T14:17:07.868767+00:00 | 58.83 | 2026-07-15 | 1.02 | 37.7 |
-| 19 | HUBB | 2026-05-12T03:51:26.286346+00:00 | 490.16 | 2026-05-29 | 1.16 | 37.0 |
-| 20 | ED | 2026-05-07T14:06:10.182132+00:00 | 106.87 | 2026-05-13 | 0.00 | 37.6 |
+`TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW`
 
 Data-quality note: EA, JNJ and ED have stored `dividend_yield_pct=0.0`. Preserve the historical snapshot as-is and flag this when evaluating strategy results; do not rewrite history silently.
 
-Current structured log retention proves PSA delivery and shows no `DELIVERED_BUT_NOT_HISTORY` mismatch. Older history entries predate the currently retained structured Telegram-delivery log, so absence from that log must not be interpreted as proof they were never delivered.
+ITW remains separate as `QUALIFIED_BUT_DELIVERY_FAILED` and must not be retroactively inserted into delivered history.
 
-## Strategy evaluation contract — LOCKED for next phase
+## Strategy evaluation contract — LOCKED
 
 Do not judge the strategy by whether a stock eventually rises. For every delivered signal, evaluate from the frozen signal price:
 
@@ -100,7 +124,7 @@ Portfolio-level metrics:
 
 If +3%/+5% is not reached within 20 trading days, record `NOT_REACHED_T20`; do not wait indefinitely.
 
-19 of the 20 delivered signals are mature enough for T+20 analysis. PSA remains a live forward-validation case. ITW must be tracked separately as `QUALIFIED_BUT_DELIVERY_FAILED`, not retroactively inserted into delivered history.
+The mature historical cohort remains ready for T+20 analysis. PSA, ESS, FRT, OMC and WTW are prospective/current forward-validation cases.
 
 ## Current operating decision
 
@@ -110,18 +134,34 @@ If +3%/+5% is not reached within 20 trading days, record `NOT_REACHED_T20`; do n
 
 **STRATEGY EVALUATION: READY**
 
-For the next 3–5 trading days, make no strategy/filter/schema/ledger changes unless new evidence demonstrates a real defect. Verify only:
+Do not change thresholds, strategy filters, schema, ledger design, or infrastructure unless new evidence demonstrates a real defect.
+
+Monitor only:
 
 1. weekday 10:00 New York run executes;
-2. if a clean signal exists, the signal is delivered before/with the heartbeat;
-3. successfully delivered clean signals appear in `history.json` and failed deliveries do not.
-
-Do not loosen RSI or other strategy thresholds because of low signal count.
+2. clean signals, when present, are delivered successfully;
+3. delivered signals enter `history.json`;
+4. failed deliveries do not enter history;
+5. heartbeat/runtime status remains truthful.
 
 ## Next high-value task
 
-Run the first 19-case mature-signal performance study under the locked evaluation contract while allowing the production scanner to operate unchanged. Keep PSA prospective. Do not resume ledger redesign or broader infrastructure work unless the performance or runtime evidence requires it.
+Run the mature-signal performance study under the locked evaluation contract while allowing production to operate unchanged.
+
+Keep:
+- PSA, ESS, FRT, OMC, WTW as prospective cases;
+- ITW separate as `QUALIFIED_BUT_DELIVERY_FAILED`.
+
+Do not resume ledger redesign or broader infrastructure work unless performance or runtime evidence requires it.
 
 ## Starting a new chat
 
-A new DQP chat should read this file first, then inspect current GitHub `main`, then ask for or inspect current Termux runtime evidence before changing anything. Never assume a GitHub implementation is deployed until runtime proves it.
+A new DQP chat should:
+
+1. read this file first;
+2. inspect current GitHub `main`;
+3. inspect current Termux runtime evidence before changing anything;
+4. preserve the 24-signal delivered baseline and ITW exception;
+5. avoid strategy changes until the performance study provides evidence.
+
+Never assume a GitHub implementation is deployed until runtime proves it.
