@@ -1,7 +1,7 @@
 # DQP Decision Record — Runtime Delivery + Evaluation Contract
 
 Date: 2026-09-10
-Last reconciled: 2026-09-12
+Last reconciled through runtime evidence dated: 2026-09-16
 Status: ACCEPTED
 
 ## Decision
@@ -9,58 +9,77 @@ Status: ACCEPTED
 1. Fix the proven Telegram transient-delivery defect with bounded retries for required clean-signal `transport_error` failures only.
 2. Do not retry API rejections.
 3. Keep the invariant that `history.json` is updated only after verified successful signal delivery.
-4. Keep ITW outside delivered history and classify it as `QUALIFIED_BUT_DELIVERY_FAILED`.
+4. Preserve failed-delivery incidents separately from later successful signal occurrences.
 5. Hold further strategy engineering unless new evidence proves another defect.
 6. Evaluate delivered signals using maximum drawdown, +3%/+5% first-hit timing, fixed T+ checkpoints, dividend-adjusted total return, and SPY comparison.
 
-## Evidence
+## Original Sep 10 ITW evidence
 
-### Sep 10 ITW runtime evidence
+ITW qualified as the clean signal. Telegram delivery failed with a transient connection reset. `history.json` was not modified because delivery was not verified.
 
-The scheduled scan identified ITW as the clean signal. Telegram delivery failed with a transient connection reset. The heartbeat then delivered successfully about five seconds later. `history.json` was not modified because the signal alert was not verified as delivered.
+This occurrence remains classified:
 
-This proved a narrow reliability defect: a transient Telegram transport failure can lose a valid signal even when connectivity recovers seconds later.
+`QUALIFIED_BUT_DELIVERY_FAILED`
 
-### Correction evidence
+It justified the bounded retry correction.
+
+## Correction evidence
 
 Implementation commits:
 
 - `cfb2a2b77062c2da421e0ee53448539545a4678c`
 - `140f1b7905dcc8dadfaf190c03c1d7dc24470799`
 
-Termux runtime was fast-forwarded to `140f1b7` and the Telegram delivery regression suite passed **8/8**.
+Termux regression suite passed **8/8** after deployment.
 
-### Sep 11 live validation
+## Sep 11 live evidence
 
-The next live run delivered four clean signals:
+Four clean signals were delivered successfully:
 
 - ESS
 - FRT
 - OMC
 - WTW
 
-Evidence:
-- attempted=4
-- delivered=4
-- failures=0
-- every delivered signal returned HTTP 200
-- history count advanced **20 -> 24**
-- `history.json` and `history.json.last-good` are semantically equal
-- delivered-but-not-history = empty
-- invalid history writes = empty
-- ITW remains absent, correctly
+History advanced **20 -> 24** with no delivered-but-missing or invalid writes.
 
-The same run's heartbeat timed out after the four signals were already delivered, so run-level `success=false` / exit 23 remained truthful. This did not affect signal delivery or history integrity.
+## Sep 15 live evidence
 
-## Delivered baseline
+Three clean signals delivered successfully with HTTP 200:
 
-Current delivered/tracked signal count: **24**.
+- APD
+- ITW
+- INVH
+
+History advanced **24 -> 27**.
+
+Primary and last-good history snapshots both contained 27 rows and were semantically equal.
+
+The Sep 15 ITW occurrence is a later valid signal. It must remain in delivered history while the Sep 10 failed occurrence remains separately preserved in the incident record.
+
+## Sep 16 deduplication evidence
+
+Signal-generated candidates included APD, FRT, INVH, KVUE and LRCX.
+
+Clean candidates were APD, FRT and INVH. Each was already recorded in history, so deduplication correctly prevented repeat alerts.
+
+KVUE and LRCX were correctly skipped by the clean-only gate.
+
+No new history entries were written.
+
+Heartbeat delivered successfully.
+
+This confirms that `Clean signals` in the heartbeat represents clean candidates identified in the daily scan, while actual Telegram signal messages are further reduced by deduplication.
+
+## Current delivered baseline
+
+Current delivered/tracked signal count: **27**.
 
 Symbols:
 
-`TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW`
+`TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW, APD, ITW, INVH`
 
-EA, JNJ and ED retain stored `dividend_yield_pct=0.0`. Preserve those snapshots and flag them as data-quality limitations.
+EA, JNJ and ED retain stored `dividend_yield_pct=0.0`. Preserve those snapshots and flag them during performance analysis.
 
 ## Evaluation contract
 
@@ -93,14 +112,6 @@ Aggregate metrics:
 
 **STRATEGY EVALUATION: READY**
 
-Prospective/current cases:
-- PSA
-- ESS
-- FRT
-- OMC
-- WTW
+No new repository or strategy change is justified by the Sep 15/16 evidence.
 
-Separate non-delivered case:
-- ITW — `QUALIFIED_BUT_DELIVERY_FAILED`
-
-Do not loosen thresholds or redesign the scanner because of signal frequency. Strategy changes must be driven by performance evidence.
+Strategy changes must be driven by the performance study, not by signal frequency or repeated daily candidates.
