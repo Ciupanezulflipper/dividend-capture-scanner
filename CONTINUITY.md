@@ -18,61 +18,88 @@ Repository: `Ciupanezulflipper/dividend-capture-scanner`
 Default branch: `main`
 Termux runtime: `/data/data/com.termux/files/home/dividend-capture-scanner`
 
-## Latest verified state — 2026-09-12
+## Latest verified state
 
-### Telegram retry correction remains deployed
+### Telegram retry correction
 
-The transient Telegram transport retry fix is deployed at runtime head `140f1b7905dcc8dadfaf190c03c1d7dc24470799`.
+The transient Telegram transport retry fix remains deployed at runtime head:
+
+`140f1b7905dcc8dadfaf190c03c1d7dc24470799`
 
 Behavior:
-- required clean-signal messages retry transient `transport_error` failures only;
-- up to two bounded retries after short delays;
-- API rejection is not retried;
-- history is written only after verified signal delivery.
 
-Termux regression suite: **8/8 PASS**.
+- retry required clean-signal `transport_error` failures only;
+- at most two bounded retries;
+- do not retry API rejection;
+- write history only after verified successful signal delivery.
 
-### Sep 11 live reconciliation
+### Delivered baseline progression
 
-The next live run delivered four clean signals successfully:
+Verified history progression:
 
-`ESS, FRT, OMC, WTW`
+- prior baseline: 20
+- Sep 11: +ESS +FRT +OMC +WTW -> 24
+- Sep 15: +APD +ITW +INVH -> 27
+- Sep 16: 0 new writes because APD/FRT/INVH were already tracked
 
-Runtime evidence:
-- signal attempt count = 4
-- signal success count = 4
-- signal failure count = 0
-- each signal returned HTTP 200 and `outcome=delivered`
-- `history.json` count advanced **20 -> 24**
-- `history.json` and `history.json.last-good` are semantically equal
-- delivered-but-not-history = empty
-- invalid history writes = empty
-- ITW remains excluded as `QUALIFIED_BUT_DELIVERY_FAILED`
+Current delivered/tracked history count: **27**.
 
-New stored snapshots:
+Current tracked symbols:
 
-| Symbol | Alerted at UTC | Price | Ex-date | Yield % | RSI | MA200 |
-|---|---|---:|---|---:|---:|---:|
-| ESS | 2026-09-10T14:40:46.599791+00:00 | 274.37 | 2026-09-30 | 3.776 | 36.07 | 263.999 |
-| FRT | 2026-09-10T14:40:48.533577+00:00 | 115.16 | 2026-10-01 | 4.029 | 34.30 | 109.986 |
-| OMC | 2026-09-10T14:40:49.966731+00:00 | 78.30 | 2026-09-18 | 4.087 | 35.88 | 77.189 |
-| WTW | 2026-09-10T14:40:51.298522+00:00 | 313.72 | 2026-09-30 | 1.224 | 37.96 | 298.864 |
+`TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW, APD, ITW, INVH`
 
-The run-level status was still `success=false` / exit 23 because the heartbeat transport timed out after the four signal deliveries succeeded. This is truthful runtime health reporting, not signal loss.
+Runtime persistence check:
 
-### Delivered baseline
+- `history.json = 27`
+- `history.json.last-good = 27`
+- semantic equality = true
 
-Current delivered/tracked history count: **24**.
+### Sep 15 delivery proof
 
-Symbols:
+Delivered successfully with HTTP 200:
 
-`TGT, TRV, WMB, AEE, PCAR, EA, CB, JNJ, NEE, PSA, DVN, BALL, APA, TPL, EOG, REG, TJX, FCX, HUBB, ED, ESS, FRT, OMC, WTW`
+- APD
+- ITW
+- INVH
 
-EA, JNJ and ED retain stored yield `0.0`; preserve as historical snapshots and flag during analysis.
+KVUE and TROW were correctly skipped by the clean-only gate.
 
-### Evaluation contract
+History saved with 27 entries.
 
-For every delivered signal, use the frozen alert price and track:
+The Sep 15 ITW event is a valid later signal and must remain in delivered history.
+
+The earlier Sep 10 ITW occurrence remains separately documented as `QUALIFIED_BUT_DELIVERY_FAILED`.
+
+### Sep 16 deduplication proof
+
+Sep 16 clean candidates:
+
+- APD
+- FRT
+- INVH
+
+All three were already recorded, so no duplicate signal alert was sent and no new history row was added.
+
+Non-clean passed rows:
+
+- KVUE
+- LRCX
+
+Both were correctly skipped.
+
+Heartbeat delivered HTTP 200.
+
+This proves the intended chain:
+
+`daily candidate -> clean gate -> dedup -> Telegram only for new clean event -> history only after verified delivery`
+
+### Data-quality note
+
+EA, JNJ and ED retain stored `dividend_yield_pct=0.0`. Preserve the historical snapshot and flag during analysis.
+
+## Locked evaluation contract
+
+For every delivered signal track:
 
 1. maximum drawdown;
 2. first +3% hit date and trading days;
@@ -84,6 +111,7 @@ For every delivered signal, use the frozen alert price and track:
 If +3%/+5% is not reached within T+20, record `NOT_REACHED_T20`.
 
 Portfolio metrics:
+
 - +3% hit rate within T+20
 - +5% hit rate within T+20
 - median days to target
@@ -100,31 +128,19 @@ Portfolio metrics:
 
 **STRATEGY EVALUATION: READY**
 
-Do not change strategy thresholds, filters, schema, ledger design, or infrastructure unless fresh evidence proves a defect.
+No strategy or repository change is justified by the latest evidence.
 
 ## Current next step
 
-Run the mature-signal performance study while production continues unchanged.
+Run the performance study while production continues unchanged.
 
-Prospective/current cases:
-- PSA
-- ESS
-- FRT
-- OMC
-- WTW
-
-Separate non-delivered case:
-- ITW — `QUALIFIED_BUT_DELIVERY_FAILED`
+Do not modify thresholds, deduplication, Telegram delivery behavior, history semantics, or ledger/schema design unless new evidence proves a defect.
 
 ## Durable records
 
-- `AI_START_HERE.md` — authoritative current handoff
-- `CONTINUITY.md` — continuity summary
-- `DECISION_LOG.md` — historical locked decisions
+- `AI_START_HERE.md`
+- `CONTINUITY.md`
+- `DECISION_LOG.md`
 - `docs/DECISION_2026-09-10_RUNTIME_AND_EVALUATION.md`
 - `docs/INCIDENT_2026-09-10_ITW_TELEGRAM_TRANSPORT.md`
 - `obsidian/30_Dividend-Scanner/Current-State.md`
-
-## Historical context
-
-Earlier implementation decisions, first live signals, v1.1 audit/report work, heartbeat introduction, stale ex-date findings, and restore points remain documented in `DECISION_LOG.md` and repository history. Do not infer current state from old dated sections without checking this file and `AI_START_HERE.md` first.
